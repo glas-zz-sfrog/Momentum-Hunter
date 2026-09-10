@@ -124,8 +124,7 @@ function Invoke-MHRetryWorkflow {
             # discover afterward that permanent custody had already been committed.
             try {
                 $commit=& $Actions.ReconcileCommit $context 10
-                $context.custody=if ($commit -eq 'COMMITTED') {'COMMITTED_NOT_HEALTH_PROVEN'}
-                    elseif ($commit -eq 'ABSENT') {'PRECOMMIT'} else {'COMMIT_OUTCOME_UNKNOWN'}
+                $context.custody=if ($commit -eq 'COMMITTED') {'COMMITTED_NOT_HEALTH_PROVEN'} else {'COMMIT_OUTCOME_UNKNOWN'}
             } catch {$context.custody='COMMIT_OUTCOME_UNKNOWN'}
         }
         if ($context.startRequested -and $context.custody -eq 'PRECOMMIT') {

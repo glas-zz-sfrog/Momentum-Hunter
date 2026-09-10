@@ -36,10 +36,13 @@ def validate(plan, package):
             and review["disposition"] == plan["astraDisposition"], "PACKAGE_REVIEW_BINDING_REJECTED")
         for directory, field, prefix in ((Path(plan["hostExecutable"]).parent, "nativeClosure", "binary/"),
                                         (Path(plan["nativeAssembly"]).parent, "controllerNativeClosure", "binary/")):
-            actual = {str(p.resolve()) for p in directory.iterdir() if p.is_file() and p.suffix.lower() in {".dll", ".exe", ".json"}}
+            actual = {str(p.resolve()) for p in directory.rglob("*") if p.is_file() and p.suffix.lower() in {".dll", ".exe", ".json"}}
             ro.require(actual == set(plan[field]), "NATIVE_DIRECTORY_CLOSURE_INCOMPLETE")
+            packaged = {name for name in names if name.startswith(prefix) and Path(name).suffix.lower() in {".dll", ".exe", ".json"}}
+            ro.require(packaged == {prefix + Path(path).relative_to(directory).as_posix() for path in actual},
+                "PACKAGED_NATIVE_CLOSURE_INCOMPLETE")
             for path, sha in plan[field].items():
-                ro.require(ro.digest(path) == sha == hashlib.sha256(archive.read(prefix + Path(path).name)).hexdigest(), "PACKAGED_NATIVE_BYTES_MISMATCH")
+                ro.require(ro.digest(path) == sha == hashlib.sha256(archive.read(prefix + Path(path).relative_to(directory).as_posix())).hexdigest(), "PACKAGED_NATIVE_BYTES_MISMATCH")
         source = Path(plan["toolSourceRoot"]).resolve()
         ro.require(source == canonical, "ADOPTED_TOOLS_MUST_USE_ACCEPTED_CANONICAL")
         required = {str(p.resolve()) for p in (source / "momentum_hunter").glob("*.py")}
@@ -60,7 +63,8 @@ def validate(plan, package):
             "--python-executable", plan["pythonExecutable"], "--manifest", plan["pythonArguments"][-1],
             "--launch-contract", phase["launchContract"]]))
         ro.require(phase["serviceDefinition"] == expected_definition, "ADOPTION_SELECTOR_ARGUMENTS_MISMATCH")
-        ro.require(not Path(phase["launchContract"]).exists() and not Path(phase["launchContract"] + ".permanent.json").exists(), "LAUNCH_CONTRACT_ALREADY_USED")
+        ro.require(not any(Path(phase["launchContract"] + suffix).exists()
+                           for suffix in ("", ".permanent.json", ".decision.json")), "LAUNCH_CONTRACT_ALREADY_USED")
         ro.require(ro.digest(phase["readonlyConfig"]) == phase["readonlyConfigSha256"], "ADOPTION_CONFIG_DRIFT")
         config = ro.load(phase["readonlyConfig"])
         ro.canonical(config)

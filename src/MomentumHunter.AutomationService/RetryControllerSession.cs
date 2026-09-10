@@ -24,6 +24,8 @@ public sealed class RetryControllerSession : IDisposable
     private ContainedIdentity? target;
     private bool commitRequested;
     private bool committed;
+    private bool disposed;
+    private static readonly List<ControllerJobCustody> UnresolvedCustodyUntilProcessExit = new();
     public string ContractPath => path;
     public string ContractHash => hash;
     public ContainedIdentity Target => target ?? throw new InvalidOperationException("TARGET_NOT_ADMITTED");
@@ -80,7 +82,7 @@ public sealed class RetryControllerSession : IDisposable
         var commandLine = string.Join(" ", new[] { contract.Executable }.Concat(contract.Arguments).Select(WindowsContainedProcess.Quote));
         if (identity.LauncherPid != launcher.Pid || identity.LauncherCreatedFileTime != launcher.CreatedFileTime
             || !WindowsContainedProcess.SamePath(identity.Executable, contract.Executable)
-            || identity.ExecutableSha256 != contract.StaticFiles[contract.Executable]
+            || identity.ExecutableSha256 != contract.StaticFiles[Path.GetFullPath(contract.Executable)]
             || identity.CommandLine != commandLine || !WindowsContainedProcess.SamePath(identity.WorkingDirectory, contract.WorkingDirectory)
             || identity.UserSid != contract.ServiceUserSid || identity.SessionId != contract.ServiceSessionId)
             throw new InvalidOperationException("TARGET_CONTRACT_IDENTITY_MISMATCH");
@@ -155,7 +157,9 @@ public sealed class RetryControllerSession : IDisposable
 
     public async Task CommitPermanentAsync(CancellationToken cancel)
     {
-        if (committed || commitRequested || target is null) throw new InvalidOperationException("INVALID_COMMIT_PHASE");
+        if (committed || commitRequested || target is null
+            || RetryDecision.Read(path, hash, contract.AttemptId) == RetryDecision.Abort)
+            throw new InvalidOperationException("INVALID_COMMIT_PHASE");
         commitRequested = true;
         await SendAsync("COMMIT_PERMANENT_SERVICE", cancel);
         var ack = await ReceiveAsync("COMMITTED", cancel);
@@ -168,6 +172,8 @@ public sealed class RetryControllerSession : IDisposable
     {
         var receipt = path + ".permanent.json";
         if (!File.Exists(receipt)) return false;
+        if (RetryDecision.Read(path, hash, contract.AttemptId) != RetryDecision.Commit)
+            throw new InvalidOperationException("PERMANENT_DECISION_MISSING");
         RetryLaunchGate.ValidatePermanent(File.ReadAllBytes(receipt), hash, contract.AttemptId);
         var value = RetryLaunchGate.Decode<PermanentServiceReceipt>(File.ReadAllBytes(receipt));
         if (!commitRequested || value.Nonce != nonce || value.LauncherPid != launcher?.Pid
@@ -178,8 +184,12 @@ public sealed class RetryControllerSession : IDisposable
 
     public void Abort()
     {
-        if (commitRequested && ReconcileCommit())
-            throw new InvalidOperationException("PERMANENT_CUSTODY_ALREADY_COMMITTED");
+        // A missing receipt is not a cancellation fence. Reserve the competing
+        // decision before any native termination or caller-owned SCM stop.
+        if (RetryDecision.Reserve(path, hash, contract.AttemptId, RetryDecision.Abort) != RetryDecision.Abort)
+            throw new InvalidOperationException(ReconcileCommit()
+                ? "PERMANENT_CUSTODY_ALREADY_COMMITTED" : "COMMIT_OUTCOME_UNKNOWN");
+        if (File.Exists(path + ".permanent.json")) throw new InvalidOperationException("CONTRADICTORY_RETRY_DECISION");
         custody.Abort();
         var timer = Stopwatch.StartNew();
         while (custody.MemberPids().Count != 0)
@@ -198,8 +208,28 @@ public sealed class RetryControllerSession : IDisposable
 
     public void Dispose()
     {
-        try { if (!committed && !(commitRequested && ReconcileCommit())) Abort(); }
-        finally { pipe.Dispose(); custody.Dispose(); }
+        if (disposed) return;
+        disposed = true;
+        var quiesced = false;
+        try
+        {
+            // Once COMMIT may be in flight, disposal is not another decision.
+            // Preserve the terminal UNKNOWN classification for explicit reconciliation.
+            if (!commitRequested) { Abort(); quiesced = true; }
+        }
+        catch (InvalidOperationException e) when (e.Message is "PERMANENT_CUSTODY_ALREADY_COMMITTED" or "COMMIT_OUTCOME_UNKNOWN") { }
+        finally
+        {
+            pipe.Dispose();
+            if (quiesced) custody.Dispose();
+            else
+            {
+                // Ordinary disposal cannot close the last O handle while the host
+                // is between its irrevocable commit reservation and BorrowJob.
+                // Process death still closes O; no continuity is claimed then.
+                lock (UnresolvedCustodyUntilProcessExit) UnresolvedCustodyUntilProcessExit.Add(custody);
+            }
+        }
     }
 
     [DllImport("kernel32", SetLastError = true)]

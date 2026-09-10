@@ -23,8 +23,11 @@ public sealed class RetryLaunchGateTests
         public readonly Process Service;
         public readonly Task<string> Stdout;
         public readonly Task<string> Stderr;
-        public Fixture(string? code = null, TimeSpan? duration = null, Action<string>? mutate = null, string? python = null)
+        private readonly bool expectedContradiction;
+        public Fixture(string? code = null, TimeSpan? duration = null, Action<string>? mutate = null, string? python = null,
+            bool expectedContradiction = false)
         {
+            this.expectedContradiction = expectedContradiction;
             Directory.CreateDirectory(Path.Combine(Root, "momentum_hunter"));
             File.WriteAllText(Path.Combine(Root, "momentum_hunter", "__init__.py"), "");
             File.WriteAllText(Path.Combine(Root, "momentum_hunter", "automation_supervisor.py"),
@@ -67,7 +70,16 @@ public sealed class RetryLaunchGateTests
 
         public void Dispose()
         {
-            try { Controller.Dispose(); }
+            try
+            {
+                if (expectedContradiction)
+                {
+                    Assert.True(Service.HasExited);
+                    Assert.Empty(Controller.MemberPids());
+                    Assert.Equal("CONTRADICTORY_RETRY_DECISION", Assert.Throws<InvalidOperationException>(() => Controller.Dispose()).Message);
+                }
+                else Controller.Dispose();
+            }
             finally
             {
                 if (!Service.HasExited) Service.Kill();
@@ -128,12 +140,13 @@ public sealed class RetryLaunchGateTests
     [InlineData("wrong-controller-birth")]
     [InlineData("wrong-pipe")]
     [InlineData("missing-static")]
+    [InlineData("missing-nested-static")]
     [InlineData("tampered-static")]
     [InlineData("torn-permanent")]
     [InlineData("partial-permanent")]
     public async Task InvalidPersistentContractNeverStartsPython(string mutation)
     {
-        using var fixture = new Fixture(mutate: path =>
+        using var fixture = new Fixture(expectedContradiction: mutation == "torn-permanent", mutate: path =>
         {
             var value = RetryLaunchGate.Decode<RuntimeLaunchContract>(File.ReadAllBytes(path));
             switch (mutation)
@@ -148,6 +161,10 @@ public sealed class RetryLaunchGateTests
                 case "wrong-controller-birth": value = value with { Controller = value.Controller with { CreatedFileTime = value.Controller.CreatedFileTime - 1 } }; break;
                 case "wrong-pipe": value = value with { PipeName = "FOREIGN" }; break;
                 case "missing-static": value.StaticFiles.Clear(); break;
+                case "missing-nested-static":
+                    var nested = value.StaticFiles.Keys.Single(key => key.EndsWith(
+                        @"runtimes\win\lib\net8.0\System.Diagnostics.EventLog.dll", StringComparison.OrdinalIgnoreCase));
+                    value.StaticFiles.Remove(nested); break;
                 case "tampered-static": value.StaticFiles[value.Executable] = new string('0',64); break;
                 case "torn-permanent": File.WriteAllText(path + ".permanent.json", "{"); break;
                 case "partial-permanent": File.WriteAllText(path + ".permanent.json.partial-test", "{}"); break;
@@ -167,6 +184,8 @@ public sealed class RetryLaunchGateTests
             mutation, deadline, kernelExitAt = fixture.Service.ExitTime.ToUniversalTime(), markerPresent = File.Exists(Path.Combine(fixture.Root, "target-first.txt")) }));
         Assert.False(File.Exists(Path.Combine(fixture.Root, "target-first.txt")));
         Assert.Empty(fixture.Controller.MemberPids());
+        if (mutation == "missing-nested-static")
+            Assert.Contains("LAUNCH_STATIC_CLOSURE_INCOMPLETE", await fixture.Stdout + await fixture.Stderr);
     }
 
     [Theory]
@@ -209,11 +228,14 @@ public sealed class RetryLaunchGateTests
         Assert.False(File.Exists(fixture.Controller.ContractPath + ".permanent.json"));
     }
 
-    [Fact]
-    public async Task ConfiguredVenvRedirectorIsContainedAndExactlyIdentified()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task ConfiguredVenvRedirectorIsContainedAndExactlyIdentified(bool forwardSlashes)
     {
         var venv = Environment.GetEnvironmentVariable("MH_CONTAINMENT_TEST_VENV")
             ?? throw new InvalidOperationException("Bind exact configured venv.");
+        if (forwardSlashes) venv = venv.Replace('\\', '/');
         using var fixture = new Fixture(python: venv);
         await fixture.Admit();
         using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(20));

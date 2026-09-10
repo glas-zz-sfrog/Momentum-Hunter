@@ -6,6 +6,18 @@ import unittest
 
 
 class RetryWorkflowTests(unittest.TestCase):
+    def test_actual_adapter_quiesce_fences_before_any_scm_operation(self):
+        source = Path(__file__).resolve().parents[1]
+        result = subprocess.run([shutil.which("pwsh"), "-NoProfile", "-NonInteractive", "-File",
+            str(source / "tests/test_prechild_quiesce.ps1"), "-Source", str(source)],
+            capture_output=True, text=True, timeout=30)
+        self.assertEqual(0, result.returncode, result.stdout + result.stderr)
+        proof = json.loads(result.stdout)
+        self.assertEqual("PASS", proof["status"])
+        self.assertEqual(3, len(proof["cases"]))
+        self.assertTrue(proof["actualAdapterFunction"])
+        self.assertEqual(0, proof["realScmOperations"])
+
     def test_json_timestamp_identity_survives_utc_and_offset_roundtrip(self):
         source = Path(__file__).resolve().parents[1]
         pwsh = shutil.which("pwsh")

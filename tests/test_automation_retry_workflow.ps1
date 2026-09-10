@@ -94,9 +94,10 @@ function Case([string]$Mode,[string]$Expected,[string]$ErrorPattern='') {
         if ($s.starts -ne 2 -or $s.stops -ne 1 -or $s.aborts -ne 0 -or $s.commits -ne 1 -or
             $s.stable[-1]-$s.stable[0] -lt 180) {throw "INCOMPLETE_WORKFLOW:$Mode"}
     }
-    if ($Mode -in @('ack-lost','commit-unknown','record-fail') -and $s.aborts -ne 0) {throw 'POSTCOMMIT_ROLLBACK_OCCURRED'}
+    if ($Mode -in @('ack-lost','commit-unknown','commit-absent','record-fail') -and $s.aborts -ne 0) {throw 'POSTCOMMIT_ROLLBACK_OCCURRED'}
     if ($Mode -eq 'ack-lost' -and $r.custody -ne 'COMMITTED_NOT_HEALTH_PROVEN') {throw 'DURABLE_COMMIT_MISCLASSIFIED'}
-    if ($Mode -eq 'commit-unknown' -and $r.custody -ne 'COMMIT_OUTCOME_UNKNOWN') {throw 'UNKNOWN_COMMIT_MISCLASSIFIED'}
+    if ($Mode -in @('commit-unknown','commit-absent') -and ($r.custody -ne 'COMMIT_OUTCOME_UNKNOWN' -or
+        -not $r.postcommitReconciliationRequired)) {throw 'UNKNOWN_COMMIT_MISCLASSIFIED'}
     if ($Mode -eq 'preflight-fail' -and $s.starts -ne 0) {throw 'PREMUTATION_GATE_BYPASSED'}
     @{case=$Mode;status='PASS';workflow=$r;starts=$s.starts;stops=$s.stops;aborts=$s.aborts;
         virtualSeconds=$s.mono;trace=$s.trace.ToArray();realSideEffects=$false}

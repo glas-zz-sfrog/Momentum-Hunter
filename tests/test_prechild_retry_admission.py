@@ -19,7 +19,8 @@ class AdmissionTests(unittest.TestCase):
         self.installed = self.root / "installed"
         self.controller = self.root / "controller"
         self.native = {"MomentumHunter.AutomationService.exe": b"test-only-exe",
-            "MomentumHunter.AutomationService.dll": b"test-only-dll", "MomentumHunter.AutomationService.runtimeconfig.json": b"{}"}
+            "MomentumHunter.AutomationService.dll": b"test-only-dll", "MomentumHunter.AutomationService.runtimeconfig.json": b"{}",
+            "runtimes/win/lib/net8.0/nested.dll": b"nested-test-only-dll"}
         self.tool_names = ("invoke_prechild_automation_retry.ps1", "automation_retry_workflow.psm1", "automation_retry_readonly.py",
             "validate_prechild_retry_plan.py", "capture_automation_retry_inputs.py", "prepare_prechild_retry_plan.py", "check_automation_preopen.py")
         source_files = {"momentum_hunter/__init__.py": b"", "momentum_hunter/automation_supervisor.py": b"# synthetic fixture"}
@@ -44,7 +45,7 @@ class AdmissionTests(unittest.TestCase):
             z.writestr("ASTRA-DISPOSITION.json", json.dumps({"head": head, "tree": tree, "unresolvedMaterialFindings": 0,
                 "disposition": "ACCEPT_PRECHILD_CONTAINMENT_AND_RETRY_CONTROLLER", "fixtureOnly": True}))
         sha = admission.ro.digest
-        closure = lambda d: {str(p): sha(p) for p in sorted(d.iterdir())}
+        closure = lambda d: {str(p): sha(p) for p in sorted(d.rglob("*")) if p.is_file()}
         host = str(self.installed / "MomentumHunter.AutomationService.exe")
         args = ["-B", "-m", "momentum_hunter.automation_supervisor", "run", "--manifest", manifest]
         phases = []
@@ -68,7 +69,7 @@ class AdmissionTests(unittest.TestCase):
             "targetScheduledAt": "2026-09-10T13:35:00Z", "scheduleAckPath": str(self.root/"ack.json")}
         self.config = {"canonicalRoot": str(self.source), "manifestPath": manifest,
             "staticFiles": {manifest: sha(manifest)}, "dynamicStateFiles": {"fixture-state": "bound"},
-            "staticDirectories": {str(self.installed): sorted(self.native)},
+            "staticDirectories": {str(self.installed): sorted(str(Path(n)) for n in self.native)},
             "authorizedServiceDefinitions": [self.plan["installedServiceDefinition"], *(p["serviceDefinition"] for p in phases)],
             "authorizedGuardianSlots": slots, "expectedLoadedBytes": {"loaded_service_host_sha256": sha(host)},
             "selection": {"serviceHost": host, "pythonExecutable": python, "arguments": args},
@@ -110,6 +111,26 @@ class AdmissionTests(unittest.TestCase):
         with self.assertRaisesRegex(RuntimeError, "NATIVE_DIRECTORY_CLOSURE_INCOMPLETE"):
             self.run_check()
 
+    def test_nested_runtime_tamper_is_package_bound(self):
+        path = self.installed / "runtimes/win/lib/net8.0/nested.dll"
+        path.write_bytes(b"changed")
+        self.plan["nativeClosure"][str(path)] = admission.ro.digest(path)
+        with self.assertRaisesRegex(RuntimeError, "PACKAGED_NATIVE_BYTES_MISMATCH"):
+            self.run_check()
+
+    def test_nested_runtime_deleted_and_removed_from_plan_still_fails(self):
+        path = self.installed / "runtimes/win/lib/net8.0/nested.dll"
+        path.unlink()
+        del self.plan["nativeClosure"][str(path)]
+        with self.assertRaisesRegex(RuntimeError, "PACKAGED_NATIVE_CLOSURE_INCOMPLETE"):
+            self.run_check()
+
+    def test_nested_controller_runtime_missing_fails(self):
+        path = self.controller / "runtimes/win/lib/net8.0/nested.dll"
+        path.unlink()
+        with self.assertRaisesRegex(RuntimeError, "NATIVE_DIRECTORY_CLOSURE_INCOMPLETE"):
+            self.run_check()
+
     def test_adapter_imported_module_is_package_bound(self):
         (self.source/"momentum_hunter/automation_supervisor.py").write_bytes(b"changed imported code")
         with self.assertRaisesRegex(RuntimeError, "PACKAGED_TOOL_SOURCE_MISMATCH"):
@@ -122,6 +143,11 @@ class AdmissionTests(unittest.TestCase):
 
     def test_already_used_contract_rejected(self):
         Path(self.plan["phases"][0]["launchContract"]).write_text("used")
+        with self.assertRaisesRegex(RuntimeError, "LAUNCH_CONTRACT_ALREADY_USED"):
+            self.run_check()
+
+    def test_existing_abort_or_commit_decision_cannot_reuse_selector(self):
+        Path(self.plan["phases"][0]["launchContract"] + ".decision.json").write_text("used")
         with self.assertRaisesRegex(RuntimeError, "LAUNCH_CONTRACT_ALREADY_USED"):
             self.run_check()
 

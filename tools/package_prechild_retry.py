@@ -86,7 +86,7 @@ def copy_evidence(source, destination):
         if not file.is_file():
             continue
         rel = file.relative_to(source)
-        if any(part in {"pycache", "__pycache__", "bin", "obj", ".git"} for part in rel.parts):
+        if any(part in {"pycache", "__pycache__", "bin", "obj", ".git", "native-temp"} for part in rel.parts):
             continue
         if file.suffix.lower() in {".zip", ".pyc"}:
             continue
@@ -126,9 +126,13 @@ def prepare(source, stage, head, base, binary, selections):
     (stage / "EXACT-DIFF.patch").write_bytes(git(source, "diff", "--binary", base, head))
     (stage / "EXACT-DIFF-NAME-STATUS.txt").write_bytes(git(source, "diff", "--name-status", base, head))
     (stage / "binary").mkdir()
-    for file in sorted(binary.iterdir()):
+    for file in sorted(binary.rglob("*")):
+        if file.is_symlink():
+            raise ValueError("NATIVE_SYMLINK_REJECTED")
         if file.is_file() and file.suffix.lower() in {".exe", ".dll", ".json"}:
-            (stage / "binary" / file.name).write_bytes(file.read_bytes())
+            target = stage / "binary" / file.relative_to(binary)
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_bytes(file.read_bytes())
     if not (stage / "binary/MomentumHunter.AutomationService.exe").is_file():
         raise ValueError("EXACT_NATIVE_BINARY_REQUIRED")
     for label, location in selections.items():

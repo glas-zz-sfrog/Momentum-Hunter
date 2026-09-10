@@ -23,6 +23,18 @@ async Task Hold(string stage, object? identity = null)
     }
 }
 
+if (mode == "decision-host")
+{
+    var info = new ProcessStartInfo(python) { WorkingDirectory = root, UseShellExecute = false };
+    foreach (var item in new[] { "-B", "-m", "momentum_hunter.automation_supervisor", "run", "--manifest", Path.Combine(root, "manifest.json") })
+        info.ArgumentList.Add(item);
+    using var gate = await RetryLaunchGate.OpenAsync(Path.Combine(root, "launch-contract.json"), info, timeout.Token);
+    using var commitTarget = WindowsContainedProcess.CreateSuspended(info);
+    await gate.AdmitResumeAsync(commitTarget, timeout.Token);
+    await gate.MonitorAsync(commitTarget, timeout.Token, stage => Hold(stage.ToString(), commitTarget.Identity).GetAwaiter().GetResult());
+    return;
+}
+
 if (mode == "controller")
 {
     Directory.CreateDirectory(Path.Combine(root, "momentum_hunter"));

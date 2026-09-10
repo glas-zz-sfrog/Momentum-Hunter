@@ -59,6 +59,10 @@ class PrechildPackageTests(unittest.TestCase):
         binary = self.root / "binary-fixture"
         binary.mkdir()
         (binary / "MomentumHunter.AutomationService.exe").write_bytes(b"NOT_EXECUTABLE_OFFLINE_PACKAGE_FIXTURE")
+        nested = binary / "runtimes/win/lib/net8.0/nested.dll"
+        nested.parent.mkdir(parents=True)
+        nested.write_bytes(b"nested-not-executable")
+        (binary / "nested.dll").write_bytes(b"different-top-level-not-executable")
         target = self.root / "prepared"
         package.prepare(repo, target, head, head, binary, {})
         proof = json.loads((target / "GIT-CHECKOUT-BYTE-BINDING.json").read_text())["files"][0]
@@ -66,6 +70,8 @@ class PrechildPackageTests(unittest.TestCase):
         self.assertEqual(package.digest(physical), proof["physicalSha256"])
         self.assertEqual(physical, (target / "source/fixture.py").read_bytes())
         self.assertEqual("EXACT_GIT_WINDOWS_CRLF_CHECKOUT", proof["representation"])
+        self.assertEqual(nested.read_bytes(), (target / "binary/runtimes/win/lib/net8.0/nested.dll").read_bytes())
+        self.assertEqual((binary / "nested.dll").read_bytes(), (target / "binary/nested.dll").read_bytes())
 
     def test_checkout_representation_is_exact_and_narrow(self):
         self.assertEqual("EXACT_GIT_BLOB", package.checkout_representation(b"a\nb\n", b"a\nb\n"))

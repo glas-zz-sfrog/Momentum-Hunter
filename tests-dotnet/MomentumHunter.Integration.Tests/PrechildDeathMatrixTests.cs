@@ -94,7 +94,24 @@ public sealed class PrechildDeathMatrixTests
             await probe.WaitForExitAsync().WaitAsync(TimeSpan.FromSeconds(15));
             foreach (var process in retained)
                 await process.WaitForExitAsync().WaitAsync(TimeSpan.FromSeconds(15));
-            Assert.Empty(Children(probe.Id));
+            var finalCensus = new List<object>();
+            var liveChildren = new List<int>();
+            foreach (var pid in Children(probe.Id))
+            {
+                try
+                {
+                    using var item = Process.GetProcessById(pid);
+                    var wait = WaitForSingleObject(item.SafeHandle.DangerousGetHandle(), 0);
+                    if (wait != 0 && wait != 258) throw new InvalidOperationException("FINAL_CHILD_KERNEL_STATE_UNPROVEN");
+                    finalCensus.Add(new { pid, kernelWait = wait, terminated = wait == 0 });
+                    if (wait == 258) liveChildren.Add(pid);
+                }
+                catch (ArgumentException) { finalCensus.Add(new { pid, exitedBeforeOpen = true }); }
+            }
+            // Toolhelp can retain a terminated entry after the retained process object
+            // is signaled. The invariant is no live task code, not no stale census row.
+            File.WriteAllText(Path.Combine(root, "final-child-kernel-census.json"), JsonSerializer.Serialize(finalCensus));
+            Assert.Empty(liveChildren);
             File.WriteAllLines(Path.Combine(root, "transcript.jsonl"), transcript);
             File.WriteAllText(Path.Combine(root, "proof.json"), JsonSerializer.Serialize(new {
                 mode, barrier, retainedCount = retained.Count, survivingTaskProcessCount = 0,
@@ -133,4 +150,5 @@ public sealed class PrechildDeathMatrixTests
     [DllImport("kernel32", SetLastError=true, CharSet=CharSet.Unicode)] private static extern bool Process32FirstW(IntPtr snapshot, ref Entry entry);
     [DllImport("kernel32", SetLastError=true, CharSet=CharSet.Unicode)] private static extern bool Process32NextW(IntPtr snapshot, ref Entry entry);
     [DllImport("kernel32")] private static extern bool CloseHandle(IntPtr handle);
+    [DllImport("kernel32")] private static extern uint WaitForSingleObject(IntPtr handle, uint milliseconds);
 }

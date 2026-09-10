@@ -208,3 +208,50 @@ An explicit normalized PathMap is identical for checkout and extracted builds.
 This prevents repository-presence metadata from changing the packaged native DLL;
 the complete DLL/EXE/JSON closure must rebuild byte-for-byte from extracted source.
 Builds and extracted-package tests use those same physical source bytes.
+
+The first extracted capsule exposed a missing nested .NET runtime dependency:
+top-level DLL equality was insufficient. Native packaging, build comparison, plan
+construction, admission validation and host static locks now include recursive
+relative paths, including runtimes/win/lib/net8.0. Missing, added or changed nested
+dependencies reject admission. That earlier failed capsule is preserved.
+
+Every qualification invocation gives its native tests a distinct TEMP/TMP root.
+Fixture collection reads only that root, preventing concurrent qualification runs
+from attributing another run's physical process evidence to this candidate.
+
+## Commit And Abort Arbitration
+
+Independent review rejected 2cace37's check-then-stop race. Receipt absence did not
+prove that the host could not publish immediately afterward. The successor uses
+a write-through, same-directory, no-replace decision record: COMMIT_RESERVED or
+ABORT_RESERVED. Both actors use the same winner selection before publishing a
+permanent receipt or terminating the Job. Abort cannot win after commit reservation;
+commit cannot publish after abort reservation. Reservation alone is not permanent
+service authority. A reserved commit with no valid receipt is COMMIT_OUTCOME_UNKNOWN,
+never ordinary precommit cleanup or permission to retry.
+
+The actual PowerShell Quiesce path invokes native Abort before SCM inspection or
+Stop-Service. Native Abort must win/validate the abort decision before termination.
+After requesting commit, the workflow treats even an absent receipt as unknown.
+Ordinary Dispose retains the outer Job handle until controller process exit once
+commit was requested, is reserved/committed, or its decision cannot be proven; it cannot close
+the last handle during the publication/BorrowJob gap. Controller death still closes
+its handles, so the already-disclosed transfer-gap continuity limitation remains.
+Incomplete/contradictory decisions fail closed. Restart of an aborted selector or
+a commit reservation without a receipt is forbidden, and adoption rejects reuse.
+
+Physical decision tests invoke these exact production classes in the disposable
+native probe with blocking observation callbacks at BeforeReservation,
+ReservedBeforePublication, PublishedBeforeBorrow and Borrowed. These callbacks do
+not exist in the installed service's CLI/configuration and cannot substitute a
+decision; the actual service worker supplies none. Native cancellation/disposal and
+write-once contention are tested separately from the actual service EXE handshake.
+The exact PowerShell Quiesce function is also executed with inert native/SCM
+boundaries. No installed SCM stop or production Session-0 operation is claimed.
+
+One working death-matrix run completed all retained-process exit waits but still
+saw a terminated host in Toolhelp's process census. That failed observation remains
+preserved. Final tests retain the census and classify each remaining row with the
+kernel process-signaled state, rejecting any live or unprovable child. The original
+15-second process-exit bound is unchanged; an empty stale metadata table is not
+substituted for proof that every retained task process actually exited.

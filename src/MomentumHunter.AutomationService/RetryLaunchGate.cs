@@ -76,15 +76,19 @@ public sealed class RetryLaunchGate : IDisposable
                     throw new InvalidOperationException("STATIC_INPUT_IDENTITY_DRIFT:" + file.Key);
             }
             gate = new(path, hash, value, owner, locks);
+            var decision = RetryDecision.Read(path, hash, value.AttemptId);
+            if (decision == RetryDecision.Abort) throw new InvalidOperationException("RETRY_GENERATION_ABORTED");
             if (Directory.EnumerateFiles(Path.GetDirectoryName(path)!, Path.GetFileName(gate.PermanentReceiptPath) + ".partial-*").Any())
                 throw new InvalidOperationException("INCOMPLETE_PERMANENT_PUBLICATION");
             if (File.Exists(gate.PermanentReceiptPath))
             {
+                if (decision != RetryDecision.Commit) throw new InvalidOperationException("PERMANENT_DECISION_MISSING");
                 ValidatePermanent(File.ReadAllBytes(gate.PermanentReceiptPath), hash, value.AttemptId);
                 gate.permanent = true;
                 gate.HandoffComplete = true;
                 return gate;
             }
+            if (decision == RetryDecision.Commit) throw new InvalidOperationException("COMMIT_OUTCOME_UNKNOWN");
             gate.RequireDeadline();
             gate.Controller = new ControllerProcessLease(value.Controller);
             gate.pipe = new NamedPipeClientStream(".", value.PipeName, PipeDirection.InOut,
@@ -122,7 +126,8 @@ public sealed class RetryLaunchGate : IDisposable
         await SendAsync(new("RUNNING", contractHash, nonce, target.Identity), cancel);
     }
 
-    public async Task MonitorAsync(WindowsContainedProcess target, CancellationToken cancel)
+    public async Task MonitorAsync(WindowsContainedProcess target, CancellationToken cancel,
+        Action<RetryCommitStage>? observe = null)
     {
         if (permanent) { await Task.Delay(Timeout.InfiniteTimeSpan, cancel); return; }
         while (true)
@@ -140,14 +145,21 @@ public sealed class RetryLaunchGate : IDisposable
             using var process = Process.GetCurrentProcess();
             var receipt = new PermanentServiceReceipt(1, contractHash, contract.AttemptId,
                 DateTimeOffset.UtcNow, process.Id, process.StartTime.ToUniversalTime().ToFileTimeUtc(), nonce);
+            observe?.Invoke(RetryCommitStage.BeforeReservation);
+            if (RetryDecision.Reserve(path, contractHash, contract.AttemptId, RetryDecision.Commit) != RetryDecision.Commit)
+                throw new InvalidOperationException("RETRY_GENERATION_ABORTED");
+            observe?.Invoke(RetryCommitStage.ReservedBeforePublication);
+            RequireDeadline(); Controller.RequireAlive();
             PublishPermanent(PermanentReceiptPath, receipt);
             permanent = true;
+            observe?.Invoke(RetryCommitStage.PublishedBeforeBorrow);
             // Commit authority first, without a host alias that could defeat precommit death
             // revocation. Death in this gap can terminate the accepted instance; recovery must
             // create a fresh contained instance from the durable receipt, never claim continuity.
             adoptedOuterJob = Controller.BorrowJob();
             Controller.Dispose(); Controller = null;
             HandoffComplete = true;
+            observe?.Invoke(RetryCommitStage.Borrowed);
             // ACK loss after publication is reconciled from this exact durable receipt.
             try { await SendAsync(new("COMMITTED", contractHash, nonce, target.Identity), cancel); }
             catch (IOException) { }
@@ -207,7 +219,7 @@ public sealed class RetryLaunchGate : IDisposable
         if (manifestIndex < 0 || manifestIndex + 1 >= info.ArgumentList.Count)
             throw new InvalidOperationException("MANIFEST_ARGUMENT_REQUIRED");
         var hostRoot = Path.GetDirectoryName(Path.GetFullPath(hostExecutable))!;
-        return Directory.EnumerateFiles(hostRoot).Where(file => new[] { ".exe", ".dll", ".json" }
+        return Directory.EnumerateFiles(hostRoot, "*", SearchOption.AllDirectories).Where(file => new[] { ".exe", ".dll", ".json" }
             .Contains(Path.GetExtension(file), StringComparer.OrdinalIgnoreCase))
             .Concat(new[] { info.FileName, info.ArgumentList[manifestIndex + 1],
                 Path.Combine(info.WorkingDirectory, "momentum_hunter", "__init__.py"),

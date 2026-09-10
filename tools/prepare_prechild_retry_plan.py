@@ -37,7 +37,7 @@ def prepare(config_path, host_root, source, output, cutoff):
     ro.verify_input_files(config)
     host = host_root / "MomentumHunter.AutomationService.exe"
     assembly = host_root / "MomentumHunter.AutomationService.dll"
-    closure = {str(path): ro.digest(path) for path in sorted(host_root.iterdir())
+    closure = {str(path): ro.digest(path) for path in sorted(host_root.rglob("*"))
                if path.is_file() and path.suffix.lower() in {".dll", ".exe", ".json"}}
     ro.require(str(host) in closure and str(assembly) in closure, "BUILT_HOST_CLOSURE_REQUIRED")
     tools = [source / "tools" / name for name in ("invoke_prechild_automation_retry.ps1", "automation_retry_workflow.psm1",

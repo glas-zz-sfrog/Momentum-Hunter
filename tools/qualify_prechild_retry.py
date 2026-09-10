@@ -71,20 +71,23 @@ def qualify(source, output, head, python, full_python, packaged_binary=None):
     run("native-build", ["dotnet", "build", "src/MomentumHunter.AutomationService", "-t:Rebuild", "-c", "Release", *props])
     run("probe-build", ["dotnet", "build", "tests-dotnet/MomentumHunter.Containment.Probe", "-t:Rebuild", "-c", "Release", *props])
     built = source / "src/MomentumHunter.AutomationService/bin/Release/net8.0"
-    binary = {p.name: sha(p) for p in built.iterdir() if p.is_file() and p.suffix.lower() in {".dll", ".exe", ".json"}}
+    binary = {p.relative_to(built).as_posix(): sha(p) for p in built.rglob("*") if p.is_file() and p.suffix.lower() in {".dll", ".exe", ".json"}}
     mismatch = []
     if packaged_binary:
         packaged_binary = packaged_binary.resolve()
-        expected = {p.name: sha(p) for p in packaged_binary.iterdir() if p.is_file() and p.suffix.lower() in {".dll", ".exe", ".json"}}
+        expected = {p.relative_to(packaged_binary).as_posix(): sha(p) for p in packaged_binary.rglob("*") if p.is_file() and p.suffix.lower() in {".dll", ".exe", ".json"}}
         mismatch = [key for key in sorted(set(binary) | set(expected)) if binary.get(key) != expected.get(key)]
     write(output / "BINARY-SOURCE-BINDING.json", {"head": head, "binary": binary, "buildProperties": props,
         "packagedBinaryMismatch": mismatch, "status": "PASS" if not mismatch else "FAIL",
         "sourceRoot": str(source), "executionBinaryRoot": str(packaged_binary or built)})
     host = (packaged_binary or built) / "MomentumHunter.AutomationService.exe"
+    fixture_root = output / "native-temp"
+    fixture_root.mkdir()
     native_env = {"MH_CONTAINMENT_TEST_PYTHON": base, "MH_CONTAINMENT_TEST_VENV": str(python),
+        "TEMP": str(fixture_root), "TMP": str(fixture_root),
         "MH_CONTAINMENT_TEST_HOST": str(host),
         "MH_CONTAINMENT_TEST_PROBE": str(source / "tests-dotnet/MomentumHunter.Containment.Probe/bin/Release/net8.0/MomentumHunter.Containment.Probe.exe")}
-    fixture_before = set(Path(tempfile.gettempdir()).glob("MH-Prechild-*"))
+    fixture_before = set(fixture_root.glob("MH-Prechild-*"))
     for project in ("Integration", "Presentation", "Layout"):
         # Presentation tests intentionally resolve XAML from CallerFilePath. Mapping
         # their test source to a fictional deterministic root breaks those tests.
@@ -94,7 +97,7 @@ def qualify(source, output, head, python, full_python, packaged_binary=None):
         run("dotnet-" + project.lower(), ["dotnet", "test", "tests-dotnet/MomentumHunter." + project + ".Tests",
             "-c", "Release", *test_props, "--logger", "trx;LogFileName=" + project + ".trx", "--results-directory", output], extra_env=native_env)
     fixtures = []
-    for root in sorted(set(Path(tempfile.gettempdir()).glob("MH-Prechild-*")) - fixture_before):
+    for root in sorted(set(fixture_root.glob("MH-Prechild-*")) - fixture_before):
         if root.is_dir() and not root.is_symlink():
             for file in sorted(root.rglob("*")):
                 if file.is_file() and not file.is_symlink():
@@ -111,7 +114,7 @@ def qualify(source, output, head, python, full_python, packaged_binary=None):
         run("python-full", [python, "-B", "-m", "unittest", "discover", "-s", "tests", "-v"], 3600)
     run("compileall", [python, "-B", "-m", "compileall", "-q", "momentum_hunter", "tools", "tests"],
         extra_env={"PYTHONPYCACHEPREFIX": str(output / "pycache")})
-    parse = "$bad=@(); foreach($f in @('tools/invoke_prechild_automation_retry.ps1','tools/automation_retry_workflow.psm1','tests/test_automation_retry_workflow.ps1')) {$t=$null;$e=$null;[Management.Automation.Language.Parser]::ParseFile((Join-Path $PWD $f),[ref]$t,[ref]$e)|Out-Null;foreach($x in $e){$bad+=@{file=$f;error=$x.Message}}}; @($bad)|ConvertTo-Json; if($bad.Count){exit 1}"
+    parse = "$bad=@(); foreach($f in @('tools/invoke_prechild_automation_retry.ps1','tools/automation_retry_workflow.psm1','tests/test_automation_retry_workflow.ps1','tests/test_prechild_quiesce.ps1')) {$t=$null;$e=$null;[Management.Automation.Language.Parser]::ParseFile((Join-Path $PWD $f),[ref]$t,[ref]$e)|Out-Null;foreach($x in $e){$bad+=@{file=$f;error=$x.Message}}}; @($bad)|ConvertTo-Json; if($bad.Count){exit 1}"
     run("powershell-parse", ["pwsh", "-NoProfile", "-NonInteractive", "-Command", parse])
     native_counts = []
     for path in output.glob("*.trx"):

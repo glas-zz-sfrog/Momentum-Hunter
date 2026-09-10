@@ -110,15 +110,16 @@ function Check-Topology([double]$Seconds=15) {
     try { $session.CheckAsync($rules,$bound.Token).GetAwaiter().GetResult() } finally {$bound.Dispose()}
 }
 function Quiesce {
-    if ($null -ne $session -and $session.ReconcileCommit()) {throw 'POSTCOMMIT_SCM_MUTATION_NOT_AUTHORIZED'}
-    try {
-        $s=Service
-        if ($s.State -ne 'Stopped' -and $null -ne $ownership -and $s.ProcessId -gt 0) {
-            $actual=[MomentumHunter.AutomationService.ProcessTopologyIdentity]::Capture([int]$s.ProcessId,[long]$ownership.launcherCreatedFileTime)
-            if ($actual.Pid -ne $ownership.binding.wrapperProcessId) { throw 'SCM_REPLACEMENT_NOT_OWNED' }
-            Stop-Service -Name MomentumHunterAutomation -NoWait
-        }
-    } finally {if ($null -ne $session) {$session.Abort()}}
+    if ($null -eq $session) {throw 'NO_RETRY_ABORT_CUSTODY'}
+    $session.Abort()
+    # Abort's write-once decision fence precedes SCM inspection/stop. Commit
+    # can no longer win after this point, even if its receipt was initially absent.
+    $s=Service
+    if ($s.State -ne 'Stopped' -and $null -ne $ownership -and $s.ProcessId -gt 0) {
+        $actual=[MomentumHunter.AutomationService.ProcessTopologyIdentity]::Capture([int]$s.ProcessId,[long]$ownership.launcherCreatedFileTime)
+        if ($actual.Pid -ne $ownership.binding.wrapperProcessId) { throw 'SCM_REPLACEMENT_NOT_OWNED' }
+        Stop-Service -Name MomentumHunterAutomation -NoWait
+    }
     (Get-Service MomentumHunterAutomation).WaitForStatus([ServiceProcess.ServiceControllerStatus]::Stopped,[TimeSpan]::FromSeconds(30))
     if ((Service).ProcessId -ne 0 -or ($null -ne $session -and @($session.MemberPids()).Count -ne 0)) { throw 'QUIESCENCE_UNPROVEN' }
 }
@@ -291,7 +292,7 @@ $actions.Commit={param($c,$budget)
     try {$session.CommitPermanentAsync($bound.Token).GetAwaiter().GetResult()} finally {$bound.Dispose()}
 }
 $actions.ReconcileCommit={param($c,$budget)
-    if ($session.ReconcileCommit()) {'COMMITTED'} else {'ABSENT'}
+    if ($session.ReconcileCommit()) {'COMMITTED'} else {'UNKNOWN'}
 }
 $actions.Abort={param($c,$budget) Quiesce}
 $actions.Record={param($c,$result) Save-New 'production-terminal-result.json' $result | Out-Null}
