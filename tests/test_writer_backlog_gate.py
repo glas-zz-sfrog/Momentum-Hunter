@@ -11,8 +11,9 @@ from unittest.mock import patch
 from momentum_hunter import continuous_runtime as runtime
 from tests.writer_backlog_gate import (
     BOUNDS, CAPACITY, DEFAULT_EVIDENCE, EVIDENCE_ENV, BacklogGateError,
-    checked_path, load_trial, qualify, qualify_trial, replay_actual_queue, verify_custody,
+    checked_path, load_trial, qualify_trial, replay_actual_queue, verify_custody,
 )
+from tests.writer_backlog_readmission import qualify, verify_for_current_source
 
 
 class ProductionGroundedBacklogGateTests(unittest.TestCase):
@@ -20,7 +21,7 @@ class ProductionGroundedBacklogGateTests(unittest.TestCase):
     def setUpClass(cls):
         cls.root = Path(os.environ.get(EVIDENCE_ENV, DEFAULT_EVIDENCE))
         cls.source = Path(__file__).resolve().parents[1]
-        verify_custody(cls.root, cls.source)
+        verify_for_current_source(cls.root, cls.source)
         cls.trials = {name:load_trial(cls.root, name) for name in BOUNDS}
 
     def mutated(self, name):

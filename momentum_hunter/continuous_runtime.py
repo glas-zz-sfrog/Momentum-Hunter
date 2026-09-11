@@ -1128,6 +1128,7 @@ class ContinuousOpportunityRuntime:
         writer: EvidenceIntentWriter,
         lease_registry: LogicalRuntimeLeaseRegistry,
         checkpoint_store: RuntimeCheckpointStore,
+        research_producer=None,
     ) -> None:
         if not runtime_instance_id.strip():
             raise ContinuousRuntimeError("Runtime instance identity is required.")
@@ -1141,6 +1142,13 @@ class ContinuousOpportunityRuntime:
         self.writer = writer
         self.lease_registry = lease_registry
         self.checkpoint_store = checkpoint_store
+        if research_producer is not None and research_producer.runtime_fingerprint != config.fingerprint:
+            raise ContinuousRuntimeError("Research producer runtime identity is not the current runtime.")
+        self.research_producer = research_producer
+        if research_producer is not None:
+            research_producer.bind_native_sources({"DISCOVERY": discovery_source, "COMPOSITION": composition_source})
+        self.research_publication_failure: str | None = None
+        self._research_pending_intent: EvidenceWriteIntent | None = None
         self.lease: RuntimeLease | None = None
         self.process_state = STOPPED
         self.started_at: datetime | None = None
@@ -1507,6 +1515,7 @@ class ContinuousOpportunityRuntime:
         writer: EvidenceIntentWriter,
         lease_registry: LogicalRuntimeLeaseRegistry,
         checkpoint_store: RuntimeCheckpointStore,
+        research_producer=None,
     ) -> "ContinuousOpportunityRuntime":
         payload = checkpoint_store.load(config.runtime_identity)
         if payload.get("contract_version") != CONTRACT_VERSION:
@@ -1527,7 +1536,18 @@ class ContinuousOpportunityRuntime:
             writer=writer,
             lease_registry=lease_registry,
             checkpoint_store=checkpoint_store,
+            research_producer=research_producer,
         )
+        prior_producer = payload.get("research_producer")
+        current_binding = research_producer.binding if research_producer is not None else None
+        if (prior_producer or {}).get("binding") != current_binding:
+            raise RuntimeCheckpointError("Research producer binding changed across runtime restart.")
+        if prior_producer:
+            runtime.research_publication_failure = prior_producer.get("runtime_failure")
+            if prior_producer.get("pending_intent") is not None:
+                pending_intent = EvidenceWriteIntent(**prior_producer["pending_intent"])
+                validate_evidence_write_intent(pending_intent)
+                runtime._research_pending_intent = pending_intent
         anchored_attempt_count = int(payload.get("attempt_ledger_count", 0))
         anchored_attempt_head = payload.get("attempt_ledger_head")
         if anchored_attempt_count > len(runtime.attempt_history):
@@ -1837,6 +1857,14 @@ class ContinuousOpportunityRuntime:
         runtime._accepting_work = not runtime._writer_liveness.failure
         runtime.process_state = (FAILED if runtime._writer_liveness.failure else
                                  DEGRADED if runtime._active_degradations else READY)
+        if research_producer is not None and not runtime.research_publication_failure:
+            runtime._finish_research_handoff(recovered=True)
+            if runtime._research_pending_intent is not None:
+                runtime._publish_research_intent(runtime._research_pending_intent)
+            for intent in runtime.evidence_intents:
+                runtime._publish_research_intent(intent)
+            for failure in runtime._symbol_failures.values():
+                runtime._publish_research_failure(failure)
         runtime._checkpoint(now)
         return runtime
 
@@ -2308,6 +2336,17 @@ class ContinuousOpportunityRuntime:
             return False
         self._in_flight = work
         self._in_flight_queue = queue_name
+        research_stage = ({DISCOVERY_QUEUE: "DISCOVERY", COMPOSITION_QUEUE: "COMPOSITION"}
+                          .get(queue_name))
+        if research_stage and self.research_producer is not None and not self.research_publication_failure:
+            try:
+                source = self.discovery_source if research_stage == "DISCOVERY" else self.composition_source
+                self.research_producer.begin_native_operation(research_stage, work.fingerprint, source, work.payload)
+            except Exception as exc:
+                self.research_publication_failure = type(exc).__name__
+                # If failure cannot be made durable before acquisition, stop
+                # this admitted operation; a crash must not erase the gap.
+                self.research_producer.record_failure(type(exc).__name__)
         try:
             if queue_name == DISCOVERY_QUEUE:
                 self._process_discovery(work, now)
@@ -2318,6 +2357,8 @@ class ContinuousOpportunityRuntime:
             elif queue_name == HEALTH_QUEUE:
                 self.last_heartbeat_at = now
                 self._counters["heartbeat_count"] += 1
+            if research_stage:
+                self._finish_research_handoff()
         finally:
             self._in_flight = None
             self._in_flight_queue = None
@@ -2855,7 +2896,25 @@ class ContinuousOpportunityRuntime:
             payload_fingerprint=payload_fingerprint,
             payload=payload,
         )
-        return self.admit_evidence_intent(intent, now)
+        decision = self.admit_evidence_intent(intent, now)
+        if self.research_producer is not None and not self.research_producer.terminal:
+            # Bind the newly created source before entering the separate V2
+            # publication transaction, including an evidence-capacity rejection.
+            self._research_pending_intent = intent
+            self._checkpoint(now)
+        self._publish_research_intent(intent)
+        return decision
+
+    def _publish_research_intent(self, intent: EvidenceWriteIntent) -> None:
+        if self.research_producer is None or self.research_producer.terminal:
+            return
+        try:
+            self.research_producer.capture_intent(intent, self.research_producer.now())
+            self._research_pending_intent = None
+        except Exception as exc:
+            # Publication cannot edit the committed source result or change
+            # ordinary evidence admission. Persist the failed publication claim.
+            self.research_publication_failure = type(exc).__name__
 
     def _flush_provider_bound_cycle(self, now: datetime) -> None:
         if not self._provider_bound_events:
@@ -3019,6 +3078,15 @@ class ContinuousOpportunityRuntime:
         self._check_writer_liveness(completed_at)
         return True
 
+    def _finish_research_handoff(self, *, recovered=False) -> None:
+        if self.research_producer is None or self.research_publication_failure:
+            return
+        try:
+            self.research_producer.finish_native_operation(
+                {"DISCOVERY": self.discovery_source, "COMPOSITION": self.composition_source}, recovered=recovered)
+        except Exception as exc:
+            self.research_publication_failure = type(exc).__name__
+
     def _fail_writer(self, category: str, reason: str, now: datetime) -> None:
         self._writer_liveness.failure = reason
         self._writer_liveness.classification = category
@@ -3162,7 +3230,18 @@ class ContinuousOpportunityRuntime:
             attempt_event_id=(attempt_event.event_id if attempt_event else ""),
         )
         self._symbol_failures.move_to_end(symbol)
+        if self.research_producer is not None and symbol != "__SYSTEM__":
+            self._checkpoint(now)
+            self._publish_research_failure(self._symbol_failures[symbol])
         self._trim_ordered(self._symbol_failures, self.config.maximum_tracked_symbols)
+
+    def _publish_research_failure(self, failure: SymbolFailure) -> None:
+        if self.research_producer is None or self.research_producer.terminal or failure.symbol == "__SYSTEM__":
+            return
+        try:
+            self.research_producer.capture_symbol_failure(asdict(failure), self.research_producer.now())
+        except Exception as exc:
+            self.research_publication_failure = type(exc).__name__
 
     def _record_symbol_exception(
         self,
@@ -3418,6 +3497,11 @@ class ContinuousOpportunityRuntime:
             "execution_authority": EXECUTION_AUTHORITY_NONE,
             "order_capability": ORDER_CAPABILITY_UNAVAILABLE,
         }
+        if self.research_producer is not None:
+            payload["research_producer"] = {**self.research_producer.status(),
+                                           "runtime_failure": self.research_publication_failure,
+                                           "pending_intent": asdict(self._research_pending_intent)
+                                           if self._research_pending_intent else None}
         path = self.checkpoint_store.save(self.config.runtime_identity, payload)
         self._counters["checkpoint_writes"] += 1
         return path

@@ -606,7 +606,7 @@ class DedicatedEvidenceWriterTests(unittest.TestCase):
 
 class DedicatedEvidenceWriterScaleTests(unittest.TestCase):
     def test_full_session_uses_bounded_sharded_records_without_growing_ledger(self) -> None:
-        from tests.writer_backlog_gate import qualify
+        from tests.writer_backlog_readmission import qualify
         print("WRITER_PRIMARY_BACKLOG_GATE=" + json.dumps(qualify(), sort_keys=True))
         with tempfile.TemporaryDirectory() as temporary:
             fixture = WriterFixture(Path(temporary).resolve())
