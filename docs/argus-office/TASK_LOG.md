@@ -662,3 +662,48 @@ Protected areas require exact task scope and Hard Chew proof. Interrupt Steven b
   policy directive loaded, and tier/authority distinctions without model tools.
   This is instruction-adoption evidence, not an application test or production
   readiness proof; the Integration Steward did not edit the local instructions.
+
+## 2026-09-11 - Continuous Capture Foundation Final009 Source Integration
+
+- Exact accepted F1/Writer005/Engine008/V2 composition is canonically integrated
+  without activation. Frozen source branch
+  `codex/ARGUS-CONTINUOUS-CAPTURE-FOUNDATION-FINAL-INTEGRATION-009` remains at
+  `1a64017d52844523b6ff838e693f56cfae6e8fa7`, tree
+  `5e343c84f2c16c4c76a277364a4c977d75287bb7`, sole parent
+  `a5dfbccbb3a77a78bb80412d30f06e610ccecd43`.20 accepted paths only;
+  no unrelated Engine ancestry, Science recorder/R4 or GUI import.
+- All17 fixed Hard Chew phases passed. Primary capacity256 gate passed six
+  current actual-queue replays from retained physical007 traces;1550 admissions
+  reconcile to1294 durable+256 pending. Persistent overload remains FAILED
+  across retained restart; transient tail recovery5.0962796s. No new physical
+  capacity/unbounded/installed claim. Historical1442 and current secondary1216
+  modeled failures remain preserved, with physical correctness/budgets passing.
+- Full discovery ran3220 tests,3219 PASS and one expected WinError1314 symlink
+  privilege skip; no Qt threading warnings or GUI stall. Fresh independent
+  Astra:ACCEPT_CONTINUOUS_CAPTURE_FOUNDATION,zero unresolved material findings.
+  No product test or source repair/retry-until-green occurred.
+- The first local fast-forward stopped before push on whole raw-checkout
+  equality. Separate reviewed exact8mixed-EOL postimage copies restored all20
+  accepted owned raw hashes. A subsequent dirty-status gate stopped before
+  push despite no content difference; independently reviewed index metadata
+  completion preserved every physical byte and logical index entry and proved
+  clean status. Both failed gates, original source/reviews/freeze and test
+  receipts remain unchanged.196 unowned EOL representations are retained;
+  whole physical equality is NO, not a manufactured PASS.
+- Non-force master-only source backup completed; local/origin/direct remote
+  agreed at2026-09-11T16:11:51Z. Shared governance closeout uses a separate
+  source-descendant branch and only Roadmap/Branch Ledger/Task Log. It preserves
+  all qualified product/test/tool bytes. Exact source and closeout receipts are
+  in `F:\ArgusQualification\Integration\ARGUS-CONTINUOUS-CAPTURE-FOUNDATION-FINAL-INTEGRATION-009-20260911`.
+- Producer and recorder handoffs are ready for separate scoped implementation
+  and acceptance; rehearsal execution awaits both exact accepted dependencies.
+  Science scaling work and the original six-file recorder remain independent.
+  Accepted R4 Repair003A is offline oracle evidence only; native implementation,
+  physical/source/account/risk/safety qualification, disabled install and Paper
+  arm/canary authority remain separate. The next goal is always-on Continuous,
+  not another foundation research task or automatic production activation.
+- No deployed runtime/config, service/scheduler, provider/account, Automation
+  start/stop/restart, Paper/live/execution authority changed. Selected protected
+  files,23scheduler definitions,three service identities/PIDs, approved environment
+  and Science/R4/GUI worktrees match; two naturally changing receipts are labeled.
+  Sep10 remains MISSED with no late replay. Manual visual QA is not applicable.

@@ -2,6 +2,53 @@
 
 The Roadmap is the current-status authority. This ledger records branch evidence and classification only.
 
+## ARGUS-CONTINUOUS-CAPTURE-FOUNDATION-FINAL-INTEGRATION-009 - 2026-09-11
+
+Source classification: `COMPLETE / CANONICAL_SOURCE_INTEGRATED / NOT_ACTIVATED`.
+Frozen branch `codex/ARGUS-CONTINUOUS-CAPTURE-FOUNDATION-FINAL-INTEGRATION-009`
+retains head `1a64017d52844523b6ff838e693f56cfae6e8fa7`, tree
+`5e343c84f2c16c4c76a277364a4c977d75287bb7`, sole parent
+`a5dfbccbb3a77a78bb80412d30f06e610ccecd43` (base tree
+`d259e40c76a7607f324ae077b81f3e2ac0fae770`). The exact full-index patch
+SHA256 is `1aa10c51e01c8d20d655d5c2a04c8b5b6030ed5a31623792b32beebcb606d660`.
+Twenty exact accepted F1/Writer005/Engine008/V2 postimages compose a direct child;
+eight unrelated Engine ancestors are excluded. Donor identities remain provenance,
+not falsely claimed ancestors. Science recorder/R4 and GUI were not imported.
+
+Final Hard Chew:17 fixed phases PASS, six capacity256 actual-queue replays PASS,
+full3220 run/3219 PASS/one expected Windows symlink-privilege skip, zero Qt
+threading warnings. Fresh independent Astra accepted with zero unresolved material
+findings; JSON SHA256
+`A505C9637A8490B4F7D6D2323B0BECAB76A2444D2BC3D55DC30E4D2F46EA3D8F`.
+Old1442 and current secondary1216 modeled backlog failures remain visible;
+finite acceptance does not establish installed/unbounded/full-session readiness.
+
+Local source fast-forward preceded a stopped raw-checkout gate. Exact mixed-EOL
+payload materialization for8owned files and subsequent source-neutral index
+metadata completion received separate independent review and actual proof before
+push. All20 accepted raw hashes/blobs match; whole-checkout raw equality remains
+NO with196 unowned EOL representations retained, not normalized. Earlier failed
+gates were preserved; no source/test/candidate repair, test retry, reset, rebase,
+new executable resolution or force push occurred.
+
+Master-only non-force push completed; local master/origin/master/direct remote
+matched source at 2026-09-11T16:11:51Z with clean canonical. Evidence root:
+`F:\ArgusQualification\Integration\ARGUS-CONTINUOUS-CAPTURE-FOUNDATION-FINAL-INTEGRATION-009-20260911`.
+`SOURCE-INTEGRATION-RECEIPT.json` binds source/remote/postimage/protected proof.
+The separate branch
+`codex/ARGUS-CONTINUOUS-CAPTURE-FOUNDATION-FINAL-INTEGRATION-009-closeout`
+starts at that source and changes only Roadmap, Branch Ledger and Task Log.
+Its actual descendant identity and non-force backup are in
+`GOVERNANCE-INTEGRATION-RECEIPT.json`; qualified product/test/tool bytes remain
+unchanged. This source-only governance record grants no production activation.
+
+Protected Science six-file predecessor/R4/GUI, selected63static files,
+23scheduler definitions, three service identities/PIDs and approved environment
+remain unchanged in observed comparisons. Two natural Automation receipt changes
+are labeled separately. Sep10 remains MISSED, with no started/completed timestamp
+or late replay. No task provider contact, service/scheduler action, Automation
+restart, deployment, Paper or execution authority was exercised.
+
 ## ARGUS-PRAGMATIC-GATE-AND-EVIDENCE-POLICY-001 - 2026-09-09
 
 Source classification: `COMPLETE / CANONICAL_INTEGRATED / GOVERNANCE_ONLY`.

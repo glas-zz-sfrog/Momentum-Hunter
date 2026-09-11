@@ -55,6 +55,83 @@ This section is `CURRENT AUTHORITY` and intentionally concise.
 
 ### Active Priority
 
+`ARGUS-CONTINUOUS-CAPTURE-FOUNDATION-FINAL-INTEGRATION-009` is
+`COMPLETE / CANONICAL_SOURCE_INTEGRATED / NO_PRODUCTION_ACTIVATION`.
+On 2026-09-11 the Integration Steward admitted exact source
+`1a64017d52844523b6ff838e693f56cfae6e8fa7`, sole parent
+`a5dfbccbb3a77a78bb80412d30f06e610ccecd43`, tree
+`5e343c84f2c16c4c76a277364a4c977d75287bb7`. The source-only fast-forward
+and master-only non-force backup completed; local/master/origin/direct remote
+matched at 2026-09-11T16:11:51Z. This separate three-document closeout preserves
+the qualified source branch and records the completed admission. Re-read actual
+canonical before each successor; its governance descendant must not be mistaken
+for a changed executable candidate.
+
+The 20-path composition contains only exact accepted F1, Writer005, Engine008
+and V2 postimages. Eight unrelated Engine ancestors, Science recorder/R4, GUI
+and other Engine work were not imported. Component reachability means accepted
+blobs in the tree, not donor commits becoming ancestors. All 17 final Hard Chew
+phases passed: six production-grounded actual-queue replays, liveness/durable
+ACK/restart, F1 concurrency, V2/Science custody, cross-component interactions,
+corrected installer fixtures, expiry safety, compile/import, protected/secret
+checks and native parsing. Full discovery ran 3,220 tests: 3,219 passed and one
+expected WinError1314 symlink-privilege test was skipped. No Qt threading
+warnings or GUI stall recurred. Fresh independent Astra returned
+`ACCEPT_CONTINUOUS_CAPTURE_FOUNDATION`, zero unresolved material findings.
+
+Capacity remains 256. Finite EXPECTED/PEAK/SAFETY/TRANSIENT/PERSISTENT/ROLLOVER
+queue peaks are 2/122/244/122/256/2; transient tail catchup is 5.0962796 seconds.
+All 1,550 admissions reconcile to 1,294 durable plus 256 retained pending;
+persistent overload retains FAILED and 622 explicit rejections. This uses
+retained physical Engine007 traces with current actual queue operations, not a
+new physical capacity measurement. Original modeled queue1442>128 failure and
+the current secondary queue1216/recovery49.7694851s FAIL remain visible.
+Secondary physical write/reopen correctness and the unchanged120s budgets pass.
+Finite admission does not establish unbounded or installed/full-session capacity.
+
+Two post-merge representation gates stopped before push and remain preserved.
+Eight accepted mixed-EOL postimages were copied exactly after separate review;
+source-neutral index metadata completion then proved clean status without any
+source/commit change. All20 owned raw hashes and Git blobs match. Whole qualified
+checkout raw equality remains NO:196 unowned EOL representations were retained,
+not normalized. Their complete pre-fast-forward raw history is not independently
+proven beyond Git identity and corroborating timestamps. Original reviews,
+failed receipts and tests were not rewritten or rerun to manufacture a PASS.
+
+Evidence is in
+`F:\ArgusQualification\Integration\ARGUS-CONTINUOUS-CAPTURE-FOUNDATION-FINAL-INTEGRATION-009-20260911`:
+`SOURCE-INTEGRATION-RECEIPT.json`, `QUALIFICATION-RESULTS.json`, original and
+representation/index Astra reviews, and the exact producer/recorder/Paper
+`reviews/handoff-audit/HANDOFF-AUDIT.md`. Source review JSON SHA256 is
+`A505C9637A8490B4F7D6D2323B0BECAB76A2444D2BC3D55DC30E4D2F46EA3D8F`.
+The closeout receipt and final checks record the actual governance descendant.
+
+The next operational goal is always-on Continuous: separately authorized
+Engine producer and Science recorder work, then accepted combined rehearsal,
+then separately authorized operation. Continuous is parent; Opening is a child
+window, never a prerequisite or missed-session backfill. Sep10 remains MISSED.
+Protected recorder six-file predecessor, Science R4, GUI, approved environment,
+23 scheduler definitions and selected service identities/PIDs were preserved.
+Two naturally changing Automation receipts are separately labeled. No deployed
+release/configuration, service/scheduler, provider/account or Paper/execution
+authority changed. No Automation start/stop/restart was performed.
+
+Tier2 growing-history freshness, secondary tail latency, original status-observer
+WinError5 and between-call liveness require scoped successor qualification.
+Tier3 finite synthetic, sampled-host and skipped-branch limitations remain.
+A zero-epoch liveness expression edge has no established supported current
+finite caller; any future zero-clock/epoch-state mode needs scoped Engine
+investigation. Native Paper has accepted R4 Repair003A offline oracle evidence,
+not native implementation, physical safety qualification or arm/canary readiness.
+All Tier1 source, safety, account, mode, execution and separate activation gates
+remain intact. This closeout commissions no implementation or activation.
+
+### Prior Integration Records (Historical Evidence)
+
+The entries below retain their original dates, scope and verdicts. Their old
+priority/next-action wording does not override the current foundation status or
+the `Next / Queue` section.
+
 `ARGUS-PRAGMATIC-GATE-AND-EVIDENCE-POLICY-001` source is
 `COMPLETE / CANONICAL_INTEGRATED / GOVERNANCE_ONLY`. On 2026-09-09 the
 Integration Steward qualified and fast-forwarded the exact reviewed source
@@ -812,36 +889,45 @@ separate arming remain Tier 1. No readiness or activation is declared here.
 
 ### 1. Active
 
-1. The pragmatic gate/evidence policy source is integrated and backed up at
-   `b7c05b09a2030a23c9284aac7e3ff28f3500d2a9` and applies to future work.
-   No active product implementation is authorized by this policy; future
-   runtime/configuration changes require separately scoped implementation,
-   applicable proof and any required activation authority.
-   Existing Observer/runtime authority remains governed by its separate
-   records and evidence, not revalidated by this documentation integration.
+1. Final009 continuous foundation source is integrated and backed up at
+   `1a64017d52844523b6ff838e693f56cfae6e8fa7`; the Integration Steward is
+   closing only shared governance. Hold the accepted source stable and deliver
+   producer/recorder handoffs. No production deployment or activation follows.
+   Successors bind actual current canonical and the original qualified source,
+   exact relevant hashes and review provenance before scoped work.
 
 ### 2. Ready / Next
 
-1. `ARGUS-SCIENCE-ALWAYS-ON-SOURCE-READER-002` is ready for its separately
-   authorized closeout rerun against accepted canonical containing the GUI
-   thread-affinity repair. Do not merge newer `master` into a frozen Science
-   head; reconcile only through the serialized integration train. This readiness
-   grants no reader activation, always-on capture, exporter runtime attachment,
-   deployment, provider contact, service/scheduler mutation, Paper authority, or
-   execution authority.
-2. Continue Science, Opening Engine, and GUI work only under separate task-
-   specific directives and immutable lane bases. Source integration grants no
-   deployment or activation authority.
-3. Preserve all prior failed canaries, the empty prospective samples, and all failed
-   activation/terminal evidence exactly.
-4. Preserve the accepted Producer V4 packet and original 001D evidence.
-5. Close authoritative instrument subtype/leverage classification before any
-   Continuous Paper arming; unknown and leveraged/inverse products remain
-   execution-ineligible meanwhile.
-6. Reconcile and fully requalify the existing
-   `ARGUS-CONTINUOUS-PAPER-ACTIVATION-001` branch, then separately prove disabled
-   installation, read-only Paper preflight, and one-entry arming. No gate
-   automatically advances to live execution.
+1. Engine continuous producer: READY_FOR_SEPARATE_TASK. Register a bounded task
+   from accepted canonical; bind F1/Writer005/Engine007/Engine008/V2 dependencies,
+   implement exact one-way V2 wiring with original source identifiers/clocks and
+   seven families, then qualify/freeze/review. Opening is not a prerequisite.
+2. Science continuous recorder: READY_FOR_SEPARATE_TASK. Preserve Recorder001's
+   exact six-file predecessor and original base. Reconcile an isolated successor
+   using accepted Prep002 and actual final shared-storage dependencies; prove
+   original V2 bytes, independent receipt/eligibility chronology, atomic cursor,
+   restart and matched-shape scaling. Independently running optimization may be
+   consumed only after its own identity, scope and acceptance gates; no silent
+   import/rebase. Sustainable throughput is not yet qualified by foundation.
+3. End-to-end Continuous rehearsal: plan ready, execution BLOCKED until producer
+   and recorder source are accepted together. Separately authorize a synthetic
+   prospective producer -> writer -> V2 -> Science run with conservation,
+   clocks, durability, faults, restart and idempotency under declared bounds.
+4. Continuous operation follows accepted rehearsal and separate activation
+   authority: immutable installed closure/environment, singleton service/recorder
+   topology, guardian, quiescence/recovery and preserved epoch. No late Sep10
+   Opening replay, implicit Automation restart or duplicate runtime.
+5. Native Paper execution/safety follows that progression. Accepted Science R4
+   Repair003A at `8afc3a3bf35136840728e136352db4f017f57c1a` is an offline
+   oracle/Engine handoff only. Native implementation, real source/account/mode
+   capabilities, storage/CAS/crash recovery, risk/safety/position protection and
+   exit, required native/full suites, frozen review, disabled install and separate
+   attended Paper canary/arming remain unproven or separately gated. No Paper or
+   live authority is granted here; unknown instrument/account capabilities fail
+   closed. The exact R4 package hashes and obligations are in Final009's handoff.
+6. Preserve old failed canaries, empty samples, Producer V4/001D and every failed
+   activation/terminal receipt. Continue other lanes only under separate explicit
+   directives and immutable bases; one accepted lineage at a time integrates.
 
 ### 3. Parallel Research
 
