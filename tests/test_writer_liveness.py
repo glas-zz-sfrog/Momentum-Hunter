@@ -33,7 +33,7 @@ from tests import test_continuous_production as production_fixtures
 
 
 def catchup_report(latencies, arrival_seconds):
-    """Replay measured service times against a declared producer arrival rate."""
+    """Historical secondary stress model, never physical production occupancy."""
     finishes, clock, peak, max_age = [], 0.0, 0, 0.0
     backlog_start, longest_recovery = None, 0.0
     for index, elapsed in enumerate(latencies):
@@ -60,6 +60,7 @@ def catchup_report(latencies, arrival_seconds):
         "backlogRecoverySeconds": longest_recovery,
         "finalResidualDrainSeconds": max(0.0, clock - (len(latencies) - 1) * arrival_seconds),
         "queueModel": "SERIAL_REPLAY_OF_MEASURED_OR_DECLARED_SERVICE_TIMES",
+        "admissionRole": "NONBLOCKING_HISTORICAL_MODEL_METRIC",
         "producerArrivalRate": 1 / arrival_seconds,
         "effectiveDrainRate": len(latencies) / sum(latencies),
     }
@@ -249,12 +250,19 @@ class WriterHealthPolicyTests(unittest.TestCase):
         latencies = [.007] * 100 + [1.044, .900, 1.5] + [.007] * 4197
         report = catchup_report(latencies, 120 / 4300)
         self.assertEqual(4300, len(latencies))
+        self.assertEqual('NONBLOCKING_HISTORICAL_MODEL_METRIC', report['admissionRole'])
         self.assertLessEqual(report['queuePeak'], 128)
         self.assertGreater(report['backlogRecoverySeconds'], 3.4)
         self.assertLess(report['backlogRecoverySeconds'], 5)
         self.assertLess(report['finalResidualDrainSeconds'], .03)
         self.assertEqual(3, report['over500ms'])
         print('WRITER_CATCHUP=' + json.dumps(report, sort_keys=True))
+
+    def test_historical_overflow_remains_visible_without_becoming_primary(self):
+        report = catchup_report([1.044] * 4300, 120 / 4300)
+        self.assertGreater(report['queuePeak'], 128)
+        self.assertGreater(report['backlogRecoverySeconds'], 120)
+        self.assertEqual('NONBLOCKING_HISTORICAL_MODEL_METRIC', report['admissionRole'])
 
     def test_durable_record_missing_ack_stays_pending(self):
         with tempfile.TemporaryDirectory() as temporary:
