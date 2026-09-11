@@ -18,6 +18,7 @@ import socket
 import socketserver
 import sys
 import time
+from contextlib import ExitStack
 from dataclasses import asdict, dataclass
 from datetime import datetime, time as clock_time
 from pathlib import Path, PurePath
@@ -932,8 +933,38 @@ def run_writer(config_path: Path) -> int:
     return 0
 
 
+def build_research_fact_producer(config: Mapping[str, Any], now: datetime):
+    """Dormant unless a separate, explicit session export descriptor is supplied.
+
+    No installed configuration is provisioned here. The descriptor is bound by
+    the existing V2 publisher and runtime checkpoint, never by Science input.
+    """
+    settings = config.get("researchFactExportV2")
+    if settings is None:
+        return None
+    from momentum_hunter.continuous_v2_producer import ContinuousV2Producer
+
+    if not isinstance(settings, dict) or set(settings) != {
+        "exportRoot", "startManifest", "scienceCustodyRoots"
+    }:
+        raise ProductionDeploymentError("Research export requires an exact explicit session descriptor.")
+    return ContinuousV2Producer(
+        export_root=Path(settings["exportRoot"]), manifest=settings["startManifest"],
+        source_root_identity=str(config["runtimeBuildHash"]),
+        runtime_fingerprint=_runtime_config(config).fingerprint,
+        science_custody_roots=tuple(Path(p) for p in settings["scienceCustodyRoots"]),
+        protected_roots=(Path(str(config["runtimeStateRoot"])), Path(str(config["evidenceRoot"]))),
+        allow_persistent=True,
+    ).initialize(now)
+
+
 def run_runtime(config_path: Path) -> int:
     config = _read_config(config_path)
+    with ExitStack() as resources:
+        return _run_runtime(config, resources)
+
+
+def _run_runtime(config: Mapping[str, Any], resources: ExitStack) -> int:
     runtime_root = Path(str(config["runtimeStateRoot"]))
     runtime_root.mkdir(parents=True, exist_ok=True)
     status_path = runtime_root / "runtime-status.json"
@@ -967,6 +998,9 @@ def run_runtime(config_path: Path) -> int:
     remote_writer = ProductionRemoteWriter(config, source_identity=runtime_instance_id)
     leases = LogicalRuntimeLeaseRegistry()
     runtime_config = _runtime_config(config)
+    research_producer = build_research_fact_producer(config, datetime.now().astimezone())
+    if research_producer is not None:
+        resources.callback(research_producer.close)
     runtime = ContinuousOpportunityRuntime(
         config=runtime_config,
         runtime_instance_id=runtime_instance_id,
@@ -978,6 +1012,7 @@ def run_runtime(config_path: Path) -> int:
         writer=remote_writer,
         lease_registry=leases,
         checkpoint_store=checkpoints,
+        research_producer=research_producer,
     )
     now = datetime.now().astimezone()
     if checkpoint_path.exists():
@@ -993,6 +1028,7 @@ def run_runtime(config_path: Path) -> int:
             writer=remote_writer,
             lease_registry=leases,
             checkpoint_store=checkpoints,
+            research_producer=research_producer,
         )
     else:
         runtime.start(now)
@@ -1054,6 +1090,7 @@ def run_runtime(config_path: Path) -> int:
                 )
             if runtime.process_state == "FAILED":
                 return 2
+            finalize_research_session(runtime, phase, now)
             time.sleep(5)
     except KeyboardInterrupt:
         return 0
@@ -1064,6 +1101,21 @@ def run_runtime(config_path: Path) -> int:
             _write_runtime_status(status_path, health, state="STOPPED", config=config)
         except Exception:
             _write_runtime_status(status_path, None, state="FAILED", config=config)
+
+
+def finalize_research_session(runtime, phase, now):
+    producer = runtime.research_producer
+    if producer is None or producer.terminal or runtime.research_publication_failure:
+        return
+    cutoff = datetime.fromisoformat(producer.manifest["outcome_followup_policy"]
+        ["retry_and_finalization_cutoff"]["finalization_cutoff"].replace("Z", "+00:00"))
+    if phase == SESSION_CLOSED and now >= cutoff:
+        try:
+            producer.finalize(now, terminal_proven=runtime.process_state != "FAILED",
+                              pending_source_events=runtime.pending_work)
+        except Exception as exc:
+            runtime.research_publication_failure = type(exc).__name__
+        runtime._checkpoint(now)
 
 
 def main(argv: list[str] | None = None) -> int:

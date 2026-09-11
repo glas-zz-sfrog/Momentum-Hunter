@@ -634,12 +634,7 @@ class StrategyScienceSourceReaderV2:
             raise SourceReaderError(
                 "Canonical Science custody rejected the exact Producer bytes."
             ) from exc
-        try:
-            verification = self.recorder.verify(envelope.session_id)
-        except (RecorderCustodyError, RecorderContractError, ValueError) as exc:
-            raise SourceReaderError("Science custody commit did not verify.") from exc
-        if not verification.all_hashes_valid:
-            raise SourceReaderError("Science custody commit did not verify.")
+        self._verify_custody_commit(envelope, custody)
         self._invoke(crash_phase, "after_custody_before_cursor")
         cursor = {
             "authority": AUTHORITY,
@@ -681,6 +676,7 @@ class StrategyScienceSourceReaderV2:
             f"{publication_ordinal:020d}-{cursor_sha}.reader-cursor.json"
         )
         self._atomic_create(cursor_path, raw_cursor)
+        self._cursor_committed(cursor_path, raw_cursor, envelope, custody, state)
         loaded = self._load_state()
         if loaded.last_publication_ordinal != publication_ordinal:
             raise SourceReaderCursorError("Durable reader cursor did not verify after commit.")
@@ -693,6 +689,18 @@ class StrategyScienceSourceReaderV2:
             source_envelope_sha256=envelope.raw_sha256,
             terminal=phase == "FINAL",
         )
+
+    def _verify_custody_commit(self, envelope, custody):
+        """Default Reader keeps its full audit; Science004 may prove a delta."""
+        try:
+            verification = self.recorder.verify(envelope.session_id)
+        except (RecorderCustodyError, RecorderContractError, ValueError) as exc:
+            raise SourceReaderError("Science custody commit did not verify.") from exc
+        if not verification.all_hashes_valid:
+            raise SourceReaderError("Science custody commit did not verify.")
+
+    def _cursor_committed(self, path, raw, envelope, custody, previous):
+        """Private observation hook; default postcommit full audit is unchanged."""
 
     def consume_available(
         self,
