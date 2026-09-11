@@ -6,6 +6,8 @@ import tempfile
 import time
 import unittest
 from pathlib import Path, PurePath
+from unittest.mock import patch
+from momentum_hunter import windows_writer_storage as storage_module
 
 from momentum_hunter.windows_writer_storage import (
     OWNER_LEASE_NAME,
@@ -87,6 +89,72 @@ class WriterHardeningTests(unittest.TestCase):
                             storage.atomic_create(relative, b"evidence\n")
             finally:
                 storage.close()
+
+    def test_read_committed_uses_pinned_parent_and_rejects_aliases(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            base = Path(temporary)
+            root = base / "evidence"
+            storage = self.storage(root, "writer-read-proof")
+            relative = PurePath("records", "test", "record.json")
+            try:
+                self.assertTrue(storage.atomic_create(relative, b"durable\n"))
+                self.assertEqual(b"durable\n", storage.read_committed(relative))
+                for invalid in (PurePath("..", "outside"), PurePath("uncreated", "record.json")):
+                    with self.assertRaises(WriterPhysicalStorageError):
+                        storage.read_committed(invalid)
+                self.assertFalse((root / "uncreated").exists())
+                os.link(root / relative, base / "alias.json")
+                with self.assertRaisesRegex(WriterPhysicalStorageError, "alias"):
+                    storage.read_committed(relative)
+            finally:
+                storage.close()
+            with self.assertRaises(WriterPhysicalStorageError):
+                storage.read_committed(relative)
+
+    def test_read_rejects_opened_object_redirection_before_consuming_bytes(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            base = Path(temporary)
+            storage = self.storage(base / "evidence", "reader-target-proof")
+            relative = PurePath("records", "target.json")
+            outside = base / "outside.json"
+            outside.write_bytes(b"outside-must-not-be-read")
+            try:
+                storage.atomic_create(relative, b"durable")
+                wrong = storage_module._create_file_handle(outside,
+                    desired_access=storage_module._FILE_READ_ATTRIBUTES,
+                    share_mode=7, creation_disposition=storage_module._OPEN_EXISTING,
+                    flags=storage_module._FILE_FLAG_OPEN_REPARSE_POINT)
+                with patch.object(storage._backend,"_open_existing_file",return_value=wrong), \
+                        patch.object(storage_module,"_read_handle",side_effect=AssertionError("Read before identity validation")):
+                    with self.assertRaises(WriterPhysicalStorageError):
+                        storage.read_committed(relative)
+                self.assertTrue(wrong.closed)
+                self.assertEqual(b"outside-must-not-be-read", outside.read_bytes())
+            finally:
+                storage.close()
+
+    def test_readback_handles_are_bounded_and_replaced_path_is_not_cached_truth(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root=Path(temporary)/'evidence'
+            storage=self.storage(root,'readback-bound')
+            retained=[]
+            try:
+                for sequence in range(10):
+                    relative=PurePath('records',f'{sequence}.json')
+                    storage.atomic_create(relative,str(sequence).encode())
+                    self.assertEqual(str(sequence).encode(),storage.read_committed(relative))
+                    retained.append(storage._backend._readback_handles[tuple(relative.parts)])
+                    self.assertLessEqual(len(storage._backend._readback_handles),2)
+                self.assertTrue(all(item.closed for item in retained[:-2]))
+                self.assertEqual(b'0',storage.read_committed(PurePath('records','0.json')))
+                relative=PurePath('records','9.json')
+                (root/relative).unlink()
+                (root/relative).write_bytes(b'9')
+                with self.assertRaisesRegex(WriterPhysicalStorageError,'no longer identifies'):
+                    storage.read_committed(relative)
+            finally:
+                storage.close()
+            self.assertTrue(all(item.closed for item in retained))
 
     def test_external_hard_link_alias_is_rejected_without_outside_mutation(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:

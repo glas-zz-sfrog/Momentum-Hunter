@@ -9,6 +9,7 @@ import os
 import threading
 import unicodedata
 import uuid
+from collections import OrderedDict
 from contextlib import contextmanager
 from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
@@ -113,6 +114,11 @@ class WriterPhysicalStorage:
         directory = _validated_relative_directory(relative_directory)
         return self._backend.iter_files(directory, suffix=str(suffix))
 
+    def read_committed(self, relative_path: PurePath) -> bytes:
+        """Read an immutable receipt using the writer's existing pinned parents."""
+        with self.transaction():
+            return self._backend.read_committed(_validated_relative_file(relative_path))
+
     def quarantine_partials(self) -> None:
         if self._closed:
             raise WriterPhysicalStorageError("Writer physical storage is closed.")
@@ -194,6 +200,16 @@ class _PortableStorageBackend:
         except Exception:
             temp.unlink(missing_ok=True)
             raise
+
+    def read_committed(self, relative_path: PurePath) -> bytes:
+        path = self.root
+        for part in relative_path.parts:
+            path = path / part
+            if path.is_symlink():
+                raise WriterPhysicalStorageError("Committed file path is redirected.")
+        if path.stat().st_nlink != 1:
+            raise WriterPhysicalStorageError("Committed file has an external hard-link alias.")
+        return path.read_bytes()
 
     def quarantine_partials(self) -> None:
         partial = self.root / ".partial"
@@ -350,6 +366,7 @@ class _WindowsStorageBackend:
             raise WriterPhysicalStorageError("Windows storage requires Windows.")
         self.root = Path(os.path.abspath(root))
         self._directories: dict[tuple[str, ...], _WindowsHandle] = {}
+        self._readback_handles: OrderedDict[tuple[str, ...], _WindowsHandle] = OrderedDict()
         self._owner_handle: _WindowsHandle | None = None
         try:
             self.root.parent.mkdir(parents=True, exist_ok=True)
@@ -484,9 +501,11 @@ class _WindowsStorageBackend:
                     "Canonical target retains an external hard-link alias."
                 )
             if target_handle is not None:
-                target_handle.close()
+                self._retain_readback(relative_path, target_handle)
                 target_handle = None
-            temp_handle.close()
+                temp_handle.close()
+            else:
+                self._retain_readback(relative_path, temp_handle)
             temp_handle = None
             return created
         except WriterPhysicalStorageError:
@@ -507,11 +526,13 @@ class _WindowsStorageBackend:
         self,
         parent: _WindowsHandle,
         name: str,
+        *,
+        read_data: bool = True,
     ) -> _WindowsHandle:
         path = parent.path / _validated_component(name)
         handle = _create_file_handle(
             path,
-            desired_access=_GENERIC_READ | _FILE_READ_ATTRIBUTES,
+            desired_access=(_GENERIC_READ if read_data else 0) | _FILE_READ_ATTRIBUTES,
             share_mode=_FILE_SHARE_READ | _FILE_SHARE_WRITE | _FILE_SHARE_DELETE,
             creation_disposition=_OPEN_EXISTING,
             flags=_FILE_FLAG_OPEN_REPARSE_POINT | _FILE_FLAG_SEQUENTIAL_SCAN,
@@ -537,6 +558,33 @@ class _WindowsStorageBackend:
             return _read_handle(handle)
         finally:
             handle.close()
+
+    def read_committed(self, relative_path: PurePath) -> bytes:
+        parent = self._directories.get(tuple(relative_path.parts[:-1]))
+        if parent is None:
+            raise WriterPhysicalStorageError("Committed file parent is not pinned.")
+        cached = self._readback_handles.get(tuple(relative_path.parts))
+        if cached is None:
+            return self._read_existing(parent, relative_path.parts[-1])
+        handle = self._open_existing_file(parent, relative_path.parts[-1], read_data=False)
+        try:
+            if _file_identity(handle) != _file_identity(cached):
+                raise WriterPhysicalStorageError("Committed path no longer identifies the flushed file.")
+            if _handle_information(handle).nNumberOfLinks != 1:
+                raise WriterPhysicalStorageError("Committed file has an external hard-link alias.")
+            return _read_handle(cached)
+        finally:
+            handle.close()
+
+    def _retain_readback(self, relative_path: PurePath, handle: _WindowsHandle) -> None:
+        # Exactly one record and its ACK can be retained for synchronous readback.
+        # These are handles, not cached payload bytes or durability attestations.
+        prior = self._readback_handles.pop(tuple(relative_path.parts), None)
+        if prior is not None:
+            prior.close()
+        self._readback_handles[tuple(relative_path.parts)] = handle
+        while len(self._readback_handles) > 2:
+            self._readback_handles.popitem(last=False)[1].close()
 
     def quarantine_partials(self) -> None:
         partial = self._directories[(".partial",)]
@@ -581,6 +629,12 @@ class _WindowsStorageBackend:
 
     def close(self) -> None:
         errors: list[Exception] = []
+        for handle in self._readback_handles.values():
+            try:
+                handle.close()
+            except Exception as exc:
+                errors.append(exc)
+        self._readback_handles.clear()
         if self._owner_handle is not None:
             try:
                 self._owner_handle.close()

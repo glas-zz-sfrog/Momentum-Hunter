@@ -23,6 +23,7 @@ from momentum_hunter.continuous_runtime import (
     WRITER_DUPLICATE,
     WRITER_SLOW,
     WRITER_UNAVAILABLE,
+    WriterWriteResult,
     validate_evidence_write_intent,
 )
 from momentum_hunter.event_runtime_topology import (
@@ -778,6 +779,30 @@ class DedicatedEvidenceWriter:
             raise ContinuousEvidenceWriterError("Cached evidence record identity changed.")
         return actual
 
+    def verify_durable_ack(
+        self, envelope: WriterEnvelope, acknowledgement: EvidenceWriterAcknowledgement
+    ) -> None:
+        """Reconcile the response using writer-owned, pinned immutable paths."""
+        if self._storage is None:
+            raise ContinuousEvidenceWriterError("Writer storage is closed.")
+        with self._storage.transaction():
+            if self._acks_by_sequence.get(envelope.sequence) != (envelope, acknowledgement):
+                raise ContinuousEvidenceWriterError("Returned acknowledgement is not the committed acknowledgement.")
+            expected = _canonical_bytes({
+                "schemaVersion": RECORD_SCHEMA_VERSION,
+                "profile": ACK_PROFILE,
+                "topologyId": self.topology.topology_id,
+                "topologyFingerprint": self.topology.fingerprint,
+                "envelope": asdict(envelope),
+                "acknowledgement": asdict(acknowledgement),
+            })
+            relative_ack = PurePath("sessions", envelope.session_id, f"{envelope.sequence:08d}.ack.json")
+            if self._storage.read_committed(relative_ack) != expected:
+                raise ContinuousEvidenceWriterError("Committed acknowledgement bytes changed.")
+            record = self._storage.read_committed(PurePath(acknowledgement.relative_record_path))
+            if hashlib.sha256(record).hexdigest() != acknowledgement.record_sha256:
+                raise ContinuousEvidenceWriterError("Committed record bytes changed.")
+
     def _revalidate_acknowledged_record(
         self,
         acknowledgement: EvidenceWriterAcknowledgement,
@@ -935,11 +960,16 @@ class AuthenticatedEvidenceWriterClient:
         )
         self._pending_intent: EvidenceWriteIntent | None = None
         self._pending_envelope: WriterEnvelope | None = None
+        self.last_write_result: WriterWriteResult | None = None
 
     def set_writer(self, writer: DedicatedEvidenceWriter | None) -> None:
         self.writer = writer
 
     def write_intent(self, intent: EvidenceWriteIntent) -> str:
+        self.last_write_result = self.write_intent_with_health(intent)
+        return self.last_write_result.status
+
+    def write_intent_with_health(self, intent: EvidenceWriteIntent) -> WriterWriteResult:
         validate_evidence_write_intent(intent)
         if intent.runtime_instance_id not in self.allowed_intent_runtime_ids:
             raise ContinuousEvidenceWriterError("Client received another runtime's intent.")
@@ -958,18 +988,19 @@ class AuthenticatedEvidenceWriterClient:
                 },
             )
         if self.writer is None or self.writer.closed:
-            return WRITER_UNAVAILABLE
+            return WriterWriteResult(WRITER_UNAVAILABLE)
         started = time.perf_counter()
         try:
             acknowledgement = self.writer.accept(self._pending_envelope)
         except WriterUnavailableError:
-            return WRITER_UNAVAILABLE
-        elapsed = time.perf_counter() - started
-        if elapsed > self.maximum_ack_seconds:
-            return WRITER_SLOW
+            return WriterWriteResult(WRITER_UNAVAILABLE)
         if acknowledgement.status not in {WRITER_ACCEPTED, WRITER_DUPLICATE}:
             raise ContinuousEvidenceWriterError("Writer acknowledgement status is unsupported.")
-        result = acknowledgement.status
+        self.writer.verify_durable_ack(self._pending_envelope, acknowledgement)
+        elapsed = time.perf_counter() - started
+        # maximum_ack_seconds is retained for caller compatibility, not authority.
+        # Every caller receives the same fixed 500ms health classification.
+        result = WriterWriteResult(acknowledgement.status, acknowledgement_seconds=elapsed)
         self._pending_intent = None
         self._pending_envelope = None
         return result
