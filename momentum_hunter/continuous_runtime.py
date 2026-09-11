@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
 import os
 import tempfile
 import time
@@ -21,6 +22,12 @@ from momentum_hunter.continuous_attempt_ledger import (
 from momentum_hunter.continuous_time_identity import (
     canonical_instant,
     canonical_known_at,
+)
+from momentum_hunter.writer_liveness import (
+    ACK_SLOW_HEALTH_THRESHOLD_SECONDS,
+    WRITER_CORRECTNESS_FAILED,
+    WRITER_LIVENESS_FAILED,
+    WriterLiveness,
 )
 
 
@@ -108,6 +115,7 @@ WRITER_RESULTS = frozenset(
         IPC_PROTOCOL_REJECTED,
         WRITER_OWNER_CONFLICT,
         WRITE_FAILED,
+        WRITER_CORRECTNESS_FAILED,
     }
 )
 TRANSIENT_WRITER_RESULTS = frozenset(
@@ -163,10 +171,20 @@ class WriterWriteResult:
     encoded_envelope_bytes: int = 0
     protocol_ceiling_bytes: int = 0
     detail_code: str | None = None
+    acknowledgement_seconds: float | None = None
+
+    @property
+    def slow_ack_health_warning(self) -> bool:
+        return (self.acknowledgement_seconds is not None
+                and self.acknowledgement_seconds > ACK_SLOW_HEALTH_THRESHOLD_SECONDS)
 
     def __post_init__(self) -> None:
         if self.status not in WRITER_RESULTS:
             raise ContinuousRuntimeError("Writer result status is unsupported.")
+        if self.acknowledgement_seconds is not None and (
+            not math.isfinite(self.acknowledgement_seconds) or self.acknowledgement_seconds < 0
+        ):
+            raise ContinuousRuntimeError("Writer acknowledgement latency is invalid.")
         if min(
             self.payload_bytes,
             self.encoded_envelope_bytes,
@@ -1015,6 +1033,7 @@ class RuntimeHealth:
     pipeline_state: str
     stall_blocker: str | None
     stall_threshold_seconds: float
+    writer_health: dict[str, Any]
     fingerprint: str
 
 
@@ -1232,8 +1251,11 @@ class ContinuousOpportunityRuntime:
         self._active_degradations: set[str] = set()
         self._accepting_work = False
         self._stale_lease_takeovers = 0
+        self._writer_liveness = WriterLiveness()
 
     def start(self, now: datetime) -> RuntimeHealth:
+        if self._writer_liveness.failure:
+            raise ContinuousRuntimeError("Writer liveness failure requires explicit recovery qualification.")
         if self.process_state not in {STOPPED, FAILED}:
             raise ContinuousRuntimeError("Runtime is already started.")
         lease, stale = self.lease_registry.acquire(
@@ -1393,6 +1415,10 @@ class ContinuousOpportunityRuntime:
             if discovery_cadence_seconds is None
             else discovery_cadence_seconds
         )
+        tick_started = time.perf_counter()
+        if self._check_writer_liveness(now):
+            self._checkpoint(now)
+            return self.health(now)
         self.lease = self.lease_registry.heartbeat(
             self.lease, now, self.config.lease_ttl_seconds
         )
@@ -1405,18 +1431,21 @@ class ContinuousOpportunityRuntime:
         self._flush_provider_bound_cycle(now)
 
         processed = 0
-        while processed < work_budget:
+        while processed < work_budget and self.process_state != FAILED:
             queue_name = self._next_queue_with_work()
             if queue_name is None:
                 break
             if queue_name == EVIDENCE_QUEUE:
-                made_progress = self._process_evidence(now)
+                made_progress = self._process_evidence(
+                    now, observed_at=now + timedelta(seconds=time.perf_counter() - tick_started)
+                )
             else:
                 made_progress = self._process_one(queue_name, now)
             processed += 1
             if not made_progress and queue_name == EVIDENCE_QUEUE:
                 break
         self._apply_forward_progress_watchdog(now)
+        self._check_writer_liveness(now + timedelta(seconds=time.perf_counter() - tick_started))
         if self.process_state != FAILED:
             self.process_state = DEGRADED if self._active_degradations else RUNNING
         self._checkpoint(now)
@@ -1455,7 +1484,8 @@ class ContinuousOpportunityRuntime:
             processed += 1
         if self.pending_work:
             self._degrade("DRAIN_TIMEOUT")
-        self.process_state = STOPPED
+        if self.process_state != FAILED:
+            self.process_state = STOPPED
         self.last_heartbeat_at = now
         self._checkpoint(now)
         if self.lease is not None:
@@ -1744,12 +1774,75 @@ class ContinuousOpportunityRuntime:
                 runtime._queues[queue_name].restore(work)
         runtime._in_flight = None
         runtime._in_flight_queue = None
-        runtime._accepting_work = True
-        runtime.process_state = DEGRADED if runtime._active_degradations else READY
+        retained_rejections = []
+        for decision in runtime._backpressure:
+            # Validate the whole retained record before trusting its selectors.
+            body = asdict(decision)
+            fingerprint = body.pop("fingerprint")
+            if (any(type(body[name]) is not str for name in
+                    ("queue_name", "work_key", "decision", "decided_at", "source_fingerprint"))
+                    or (decision.displaced_key is not None and type(decision.displaced_key) is not str)
+                    or fingerprint != _fingerprint("continuous-backpressure-v1", body)):
+                raise RuntimeCheckpointError("Writer rejected-admission evidence is contradictory.")
+            decided_at = _parse_timestamp(decision.decided_at, "Backpressure decision time")
+            if (decision.queue_name == EVIDENCE_QUEUE and decision.decision == REJECTED_CAPACITY
+                    and decision.work_key.isdecimal()):
+                retained_rejections.append(decided_at.timestamp())
+        if "writer_liveness" in payload:
+            try:
+                runtime._writer_liveness = WriterLiveness.restore(payload["writer_liveness"])
+                monitor = runtime._writer_liveness
+                monitor.validate_rejection_history(retained_rejections, horizon=runtime._writer_liveness_horizon_seconds())
+                pending_depth = len(runtime._queues[EVIDENCE_QUEUE])
+                terminal_flags = runtime._active_degradations & {WRITER_LIVENESS_FAILED, WRITER_CORRECTNESS_FAILED}
+                if (monitor.arrivals - monitor.drains != pending_depth
+                        or bool(pending_depth) != (monitor.pending_since is not None)
+                        or (monitor.last_observation is not None and monitor.last_observation > now.timestamp())
+                        or bool(monitor.failure) != bool(terminal_flags)
+                        or (monitor.failure and (terminal_flags != {monitor.classification}
+                            or payload.get("process_state") != FAILED))):
+                    raise ValueError("Writer health contradicts authoritative pending/terminal state")
+            except (TypeError, ValueError) as exc:
+                raise RuntimeCheckpointError("Writer liveness checkpoint is invalid.") from exc
+        else:
+            if runtime._active_degradations & {WRITER_LIVENESS_FAILED, WRITER_CORRECTNESS_FAILED}:
+                raise RuntimeCheckpointError("Terminal writer checkpoint has lost its health authority.")
+            # Older checkpoints have no health history; retain the pending age,
+            # never reinterpret an uncertain legacy SLOW as a durable ACK.
+            pending = runtime._queues[EVIDENCE_QUEUE]
+            runtime._writer_liveness.arrivals = len(pending)
+            if pending.peek() is not None:
+                runtime._writer_liveness.pending_since = _parse_timestamp(
+                    pending.peek().requested_at, "Pending evidence time"
+                ).timestamp()
+                runtime._writer_liveness.window_start = runtime._writer_liveness.pending_since
+                runtime._writer_liveness.last_observation = runtime._writer_liveness.pending_since
+                runtime._writer_liveness.window_depth = len(pending)
+                runtime._writer_liveness.window_arrivals = len(pending)
+            monitor = runtime._writer_liveness
+            monitor.last_observation = now.timestamp()
+            # Legacy has only its retained diagnostic suffix, not lifetime counts.
+            monitor.capacity_rejections = monitor.observed_rejections = len(retained_rejections)
+            monitor.window_rejections = len(retained_rejections)
+            if retained_rejections:
+                times = sorted(retained_rejections)
+                if times[-1] > now.timestamp():
+                    raise RuntimeCheckpointError("Legacy rejection evidence is in the future.")
+                if now.timestamp() - times[-1] < runtime._writer_liveness_horizon_seconds():
+                    monitor.rejection_started_at = monitor.rejection_last_at = times[-1]
+                    for prior in reversed(times[:-1]):
+                        if monitor.rejection_started_at - prior >= runtime._writer_liveness_horizon_seconds():
+                            break
+                        monitor.rejection_started_at = prior
+        runtime._accepting_work = not runtime._writer_liveness.failure
+        runtime.process_state = (FAILED if runtime._writer_liveness.failure else
+                                 DEGRADED if runtime._active_degradations else READY)
         runtime._checkpoint(now)
         return runtime
 
     def admit_evidence_intent(self, intent: EvidenceWriteIntent, now: datetime) -> str:
+        if self._writer_liveness.failure:
+            return REJECTED_STALE
         existing = self._intents.get(intent.sequence)
         if existing is not None:
             if existing == intent:
@@ -1812,10 +1905,15 @@ class ContinuousOpportunityRuntime:
         if decision in {REJECTED_CAPACITY, REJECTED_STALE}:
             self._counters["incomplete_denominator_cycles"] += 1
             self._degrade("EVIDENCE_QUEUE_CAPACITY")
+            if decision == REJECTED_CAPACITY:
+                self._writer_liveness.capacity_rejections += 1
+                self._check_writer_liveness(now)
             return decision
         self._intents[intent.sequence] = intent
         self._sequence = intent.sequence
         self._last_intent_id = intent.intent_id
+        self._writer_liveness.arrivals += 1
+        self._check_writer_liveness(now)
         return decision
 
     def _writer_preflight(self, intent: EvidenceWriteIntent) -> WriterPreflight:
@@ -1950,6 +2048,9 @@ class ContinuousOpportunityRuntime:
             raise ContinuousRuntimeError(
                 "Compact evidence-rejection record could not enter the queue."
             )
+        if not replace_existing:
+            self._writer_liveness.arrivals += 1
+        self._check_writer_liveness(now)
         self._degrade("EVIDENCE_REJECTED_PERMANENT")
         return EVIDENCE_REJECTED_PERMANENT
 
@@ -2036,6 +2137,10 @@ class ContinuousOpportunityRuntime:
             flags.append(DENOMINATOR_DEGRADED)
         if FAILED_FORWARD_PROGRESS in self._active_degradations:
             flags.append(FAILED_FORWARD_PROGRESS)
+        if self._writer_liveness.consecutive_slow_acks:
+            flags.append("WRITER_SLOW_ACK_HEALTH")
+        if self._writer_liveness.failure:
+            flags.append(self._writer_liveness.classification)
         metrics = self.queue_metrics(now)
         active_queue = self._next_queue_with_work()
         queue_head = (
@@ -2139,6 +2244,11 @@ class ContinuousOpportunityRuntime:
             ),
             "evidence_protocol_ceiling_bytes": (
                 self._evidence_protocol_ceiling_bytes
+            ),
+            "writer_health": self._writer_liveness.health(
+                now=now.timestamp(), depth=len(self._queues[EVIDENCE_QUEUE]),
+                capacity=self.config.queues.evidence,
+                oldest_age=metrics[EVIDENCE_QUEUE].oldest_age_seconds,
             ),
         }
         return RuntimeHealth(
@@ -2807,7 +2917,10 @@ class ContinuousOpportunityRuntime:
         if decision not in {REJECTED_CAPACITY, REJECTED_STALE}:
             self._provider_bound_events.clear()
 
-    def _process_evidence(self, now: datetime) -> bool:
+    def _process_evidence(self, now: datetime, *, observed_at: datetime | None = None) -> bool:
+        observed_at = observed_at or now
+        if self._check_writer_liveness(observed_at):
+            return False
         work = self._queues[EVIDENCE_QUEUE].peek()
         if work is None:
             return False
@@ -2815,7 +2928,13 @@ class ContinuousOpportunityRuntime:
         retry_at = self._evidence_retry_not_before.get(intent.intent_id)
         if retry_at is not None and now < retry_at:
             return False
-        raw_result = self.writer.write_intent(intent)
+        started = time.perf_counter()
+        try:
+            write = getattr(self.writer, "write_intent_with_health", self.writer.write_intent)
+            raw_result = write(intent)
+        except Exception as exc:
+            self._fail_writer(WRITER_CORRECTNESS_FAILED, type(exc).__name__, now)
+            return False
         if isinstance(raw_result, WriterWriteResult):
             result = raw_result
         else:
@@ -2826,6 +2945,9 @@ class ContinuousOpportunityRuntime:
             result = WriterWriteResult(status=legacy_status)
         if result.status not in WRITER_RESULTS:
             raise ContinuousRuntimeError("Writer returned an unsupported result.")
+        if result.status == WRITER_CORRECTNESS_FAILED:
+            self._fail_writer(WRITER_CORRECTNESS_FAILED, result.detail_code or result.status, now)
+            return False
         if result.status in TRANSIENT_WRITER_RESULTS:
             retries = self._evidence_retry_counts.get(intent.intent_id, 0) + 1
             self._evidence_retry_counts[intent.intent_id] = retries
@@ -2883,9 +3005,47 @@ class ContinuousOpportunityRuntime:
         ):
             self._active_degradations.discard(recovered)
         self._counters["evidence_accepted_count"] += 1
+        completed_at = observed_at + timedelta(seconds=time.perf_counter() - started)
+        self._writer_liveness.drains += 1
+        self._writer_liveness.last_progress = completed_at.timestamp()
+        self._writer_liveness.record_ack(
+            result.acknowledgement_seconds, intent_id=intent.intent_id,
+            observed_at=_timestamp(completed_at),
+        )
+        if result.slow_ack_health_warning:
+            self._counters["writer_slow_events"] += 1
         self.last_evidence_accepted_at = now
         self._mark_forward_progress(now)
+        self._check_writer_liveness(completed_at)
         return True
+
+    def _fail_writer(self, category: str, reason: str, now: datetime) -> None:
+        self._writer_liveness.failure = reason
+        self._writer_liveness.classification = category
+        self._writer_liveness.last_observation = max(
+            now.timestamp(), self._writer_liveness.last_observation or now.timestamp())
+        self._degrade(category)
+        self.process_state = FAILED
+        self._accepting_work = False
+        self.pipeline_state = PIPELINE_STALLED
+        self.stall_blocker = reason
+        self.stalled_since = self.stalled_since or now
+
+    def _check_writer_liveness(self, now: datetime) -> bool:
+        queue = self._queues[EVIDENCE_QUEUE]
+        metrics = queue.metrics(now)
+        failure = self._writer_liveness.observe(
+            now=now.timestamp(), depth=len(queue), capacity=self.config.queues.evidence,
+            oldest_age=metrics.oldest_age_seconds, horizon=self._writer_liveness_horizon_seconds(),
+        )
+        if failure:
+            self._fail_writer(self._writer_liveness.classification, failure, now)
+            return True
+        if self._writer_liveness.classification in {"CAPACITY_PRESSURE", "SUSTAINED_DEGRADATION"}:
+            self._degrade("WRITER_BACKPRESSURE")
+        else:
+            self._active_degradations.discard("WRITER_BACKPRESSURE")
+        return False
 
     def _enqueue_readiness(
         self,
@@ -3097,6 +3257,10 @@ class ContinuousOpportunityRuntime:
             + self.config.cadence.housekeeping_seconds
         )
 
+    def _writer_liveness_horizon_seconds(self) -> float:
+        # The checkpoint binds config, not the history of per-tick schedule hints.
+        return 2.0 * self.config.cadence.broad_discovery_seconds + self.config.cadence.housekeeping_seconds
+
     def _stall_blocker(self) -> str:
         evidence = self._queues[EVIDENCE_QUEUE].peek()
         if evidence is not None:
@@ -3225,6 +3389,7 @@ class ContinuousOpportunityRuntime:
                 key: _timestamp(value)
                 for key, value in self._evidence_retry_not_before.items()
             },
+            "writer_liveness": self._writer_liveness.snapshot(),
             "last_evidence_payload_bytes": self._last_evidence_payload_bytes,
             "last_evidence_encoded_envelope_bytes": (
                 self._last_evidence_encoded_envelope_bytes

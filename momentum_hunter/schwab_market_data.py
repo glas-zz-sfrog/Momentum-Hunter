@@ -274,7 +274,14 @@ class SchwabReadOnlyAccessTokenProvider:
         self._thread_lock = threading.Lock()
 
     def access_token(self) -> str:
-        tokens = self._load_tokens()
+        # Readers must not hold a Windows file handle across a peer's replace.
+        try:
+            with self.secrets.refresh_ownership():
+                tokens = self._load_tokens()
+        except SchwabAuthLockError as exc:
+            raise SchwabAuthRefreshFailed(
+                "Schwab auth state-read ownership could not be acquired."
+            ) from exc
         if not tokens.expired:
             return tokens.access_token
         self.metrics.refresh_needed += 1

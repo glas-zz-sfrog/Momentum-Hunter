@@ -451,7 +451,7 @@ class ContinuousCanaryHardeningTests(unittest.TestCase):
         self.assertFalse(legacy.accepted)
         self.assertEqual(PAYLOAD_TOO_LARGE, legacy.failure_class)
 
-    def test_writer_stall_reports_pipeline_failure_while_process_is_alive(self) -> None:
+    def test_writer_stall_is_terminal_after_existing_progress_horizon(self) -> None:
         fixture = RuntimeFixture(self.root / "watchdog")
         writer = RecordSelectiveWriter()
         writer.mode = WRITER_UNAVAILABLE
@@ -463,10 +463,11 @@ class ContinuousCanaryHardeningTests(unittest.TestCase):
         fixture.runtime.tick(fixture.clock.now())
         fixture.clock.advance(631)
         health = fixture.runtime.tick(fixture.clock.now())
-        self.assertIn(PROCESS_ALIVE, health.health_flags)
-        self.assertIn(FAILED_FORWARD_PROGRESS, health.health_flags)
+        self.assertNotIn(PROCESS_ALIVE, health.health_flags)
+        self.assertEqual("FAILED", health.process_state)
+        self.assertIn("WRITER_LIVENESS_FAILED", health.health_flags)
         self.assertEqual(PIPELINE_STALLED, health.pipeline_state)
-        self.assertEqual("WRITER_UNAVAILABLE", health.stall_blocker)
+        self.assertEqual("NO_PROGRESS", health.stall_blocker)
         self.assertGreater(health.queue_head_retry_count, 0)
         self.assertEqual(630, health.stall_threshold_seconds)
 

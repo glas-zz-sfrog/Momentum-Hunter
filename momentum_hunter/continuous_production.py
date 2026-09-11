@@ -33,6 +33,7 @@ from momentum_hunter.continuous_live_qualification import (
     QualificationState,
 )
 from momentum_hunter.continuous_runtime import (
+    WRITER_CORRECTNESS_FAILED,
     EXECUTION_AUTHORITY_NONE,
     ORDER_CAPABILITY_UNAVAILABLE,
     RESEARCH_AUTHORITY,
@@ -695,6 +696,7 @@ class ProductionRemoteWriter:
         )
 
     def write_intent(self, intent: EvidenceWriteIntent) -> WriterWriteResult:
+        started = time.perf_counter()
         preflight = self.preflight_intent(intent)
         if not preflight.accepted:
             return WriterWriteResult(
@@ -752,11 +754,17 @@ class ProductionRemoteWriter:
                     encoded_envelope_bytes=preflight.encoded_envelope_bytes,
                     protocol_ceiling_bytes=preflight.protocol_ceiling_bytes,
                 )
+            try:
+                self._verify_durable_ack(intent, envelope, response)
+            except (OSError, ValueError, TypeError, KeyError) as exc:
+                self.sender = None
+                return WriterWriteResult(WRITER_CORRECTNESS_FAILED, detail_code=type(exc).__name__)
             return WriterWriteResult(
                 status=status,
                 payload_bytes=preflight.payload_bytes,
                 encoded_envelope_bytes=preflight.encoded_envelope_bytes,
                 protocol_ceiling_bytes=preflight.protocol_ceiling_bytes,
+                acknowledgement_seconds=time.perf_counter() - started,
             )
         except WriterIpcError:
             self.sender = None
@@ -782,6 +790,57 @@ class ProductionRemoteWriter:
                 encoded_envelope_bytes=preflight.encoded_envelope_bytes,
                 protocol_ceiling_bytes=preflight.protocol_ceiling_bytes,
             )
+    def _verify_durable_ack(
+        self, intent: EvidenceWriteIntent, envelope: WriterEnvelope, response: dict[str, Any]
+    ) -> None:
+        """Read-only reconciliation, using derived paths rather than response paths."""
+        root = Path(str(self.config["evidenceRoot"])) / self.topology.namespace
+        artifact = ARTIFACT_BY_EVIDENCE[intent.evidence_type]
+        relative = Path("records") / artifact / intent.record_fingerprint[:2] / f"{intent.record_fingerprint}.json"
+        ack_relative = Path("sessions") / envelope.session_id / f"{envelope.sequence:08d}.ack.json"
+
+        def read_expected(relative_path: Path) -> bytes:
+            path = root
+            for part in (None, *relative_path.parts):
+                if part is not None:
+                    path = path / part
+                info = path.lstat()
+                if path.is_symlink() or getattr(info, "st_file_attributes", 0) & 0x400:
+                    raise ValueError("Writer receipt path is redirected")
+            return path.read_bytes()
+
+        stored_ack = read_expected(ack_relative)
+        record_bytes = read_expected(relative)
+        if stored_ack != _canonical_bytes(response):
+            raise ValueError("Writer response differs from committed acknowledgement")
+        if (response.get("schemaVersion") != 1
+                or response.get("profile") != "production-continuous-ack-v1"
+                or response.get("sequence") != envelope.sequence
+                or response.get("sessionId") != envelope.session_id
+                or response.get("envelopeFingerprint") != envelope.fingerprint
+                or response.get("recordPath") != relative.as_posix()
+                or response.get("recordSha256") != hashlib.sha256(record_bytes).hexdigest()
+                or response.get("fingerprint") != _fingerprint(
+                    "production-continuous-ack-v1", {k: v for k, v in response.items() if k != "fingerprint"})):
+            raise ValueError("Writer acknowledgement identity cannot be reconciled")
+        record = json.loads(record_bytes)
+        expected = self._writer_payload(intent)
+        record_intent = dict(record["intent"])
+        legacy_payload = record_intent.pop("payload_json", None)
+        if (record.get("schemaVersion") != 2
+                or record.get("profile") != "production-continuous-evidence-record-v2"
+                or record.get("authority") != AUTHORITY
+                or record.get("executionAuthority") != EXECUTION
+                or record.get("orderCapability") != ORDER_CAPABILITY
+                or record.get("artifactName") != artifact
+                or record.get("topologyFingerprint") != self.topology.fingerprint
+                or record_intent != expected["intent"]
+                or record.get("payload") != expected["payload"]
+                or (legacy_payload is not None and legacy_payload != _canonical_text(expected["payload"]))
+                or record.get("recordFingerprint") != _fingerprint(
+                    "production-continuous-record-v1", {k: v for k, v in record.items() if k != "recordFingerprint"})
+                or _canonical_bytes(record) != record_bytes):
+            raise ValueError("Writer durable record is contradictory")
 
 
 def _market_session_phase(now: datetime) -> str:
@@ -839,6 +898,8 @@ def _qualification_metrics(state: QualificationState) -> dict[str, object]:
 
 
 def _write_runtime_status(path: Path, health: RuntimeHealth | None, *, state: str, config: Mapping[str, Any], **extra: object) -> None:
+    if health is not None and health.process_state == "FAILED":
+        state = "FAILED"
     payload: dict[str, object] = {
         "schemaVersion": 1,
         "profile": PROFILE,
@@ -949,6 +1010,8 @@ def run_runtime(config_path: Path) -> int:
     last_restart = 0.0
     try:
         while True:
+            if runtime.process_state == "FAILED":
+                return 2
             now = datetime.now().astimezone()
             phase = _market_session_phase(now)
             cadence = _resolved_discovery_cadence(phase, config)
@@ -989,6 +1052,8 @@ def run_runtime(config_path: Path) -> int:
                     resolvedDiscoveryCadenceSeconds=None,
                     qualification=_qualification_metrics(state),
                 )
+            if runtime.process_state == "FAILED":
+                return 2
             time.sleep(5)
     except KeyboardInterrupt:
         return 0

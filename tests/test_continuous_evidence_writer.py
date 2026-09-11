@@ -495,14 +495,15 @@ class DedicatedEvidenceWriterTests(unittest.TestCase):
             writer.close()
             capability.close()
 
-    def test_slow_ack_is_explicit_and_exact_retry_does_not_duplicate(self) -> None:
+    def test_legacy_latency_budget_does_not_override_durable_acceptance(self) -> None:
         intent = self.fixture.intent()
         self.fixture.writer.response_delay_seconds = 0.02
         self.fixture.client.maximum_ack_seconds = 0.001
-        self.assertEqual(WRITER_SLOW, self.fixture.client.write_intent(intent))
+        self.assertEqual(WRITER_ACCEPTED, self.fixture.client.write_intent(intent))
+        self.assertGreater(self.fixture.client.last_write_result.acknowledgement_seconds, 0.001)
         self.fixture.writer.response_delay_seconds = 0
         self.fixture.client.maximum_ack_seconds = 1
-        self.assertEqual(WRITER_ACCEPTED, self.fixture.client.write_intent(intent))
+        self.assertEqual(WRITER_DUPLICATE, self.fixture.client.write_intent(intent))
         snapshot = read_evidence_snapshot(self.fixture.topology, reader_role=OFFLINE_REVIEW)
         self.assertEqual(1, snapshot.record_count)
 
@@ -605,6 +606,8 @@ class DedicatedEvidenceWriterTests(unittest.TestCase):
 
 class DedicatedEvidenceWriterScaleTests(unittest.TestCase):
     def test_full_session_uses_bounded_sharded_records_without_growing_ledger(self) -> None:
+        from tests.writer_backlog_gate import qualify
+        print("WRITER_PRIMARY_BACKLOG_GATE=" + json.dumps(qualify(), sort_keys=True))
         with tempfile.TemporaryDirectory() as temporary:
             fixture = WriterFixture(Path(temporary).resolve())
             try:
@@ -612,6 +615,7 @@ class DedicatedEvidenceWriterScaleTests(unittest.TestCase):
                 predecessor = None
                 started = time.perf_counter()
                 count = SCALE_SESSION_RECORDS
+                latencies = []
                 for sequence in range(1, count + 1):
                     intent = fixture.intent(
                         sequence=sequence,
@@ -623,6 +627,7 @@ class DedicatedEvidenceWriterScaleTests(unittest.TestCase):
                         predecessor_identity=predecessor,
                     )
                     self.assertEqual(WRITER_ACCEPTED, fixture.client.write_intent(intent))
+                    latencies.append(fixture.client.last_write_result.acknowledgement_seconds)
                     predecessor = intent.intent_id
                 elapsed = time.perf_counter() - started
                 snapshot = read_evidence_snapshot(fixture.topology, reader_role=OFFLINE_REVIEW)
@@ -637,7 +642,24 @@ class DedicatedEvidenceWriterScaleTests(unittest.TestCase):
                 )
                 self.assertEqual(count, len(acknowledgement_files))
                 self.assertFalse((fixture.root / fixture.topology.namespace / "ledger.json").exists())
+                from tests.test_writer_liveness import catchup_report
+                report = catchup_report(latencies, SCALE_WRITE_BUDGET_SECONDS / count)
+                print("WRITER_SCALE_HEALTH=" + json.dumps({
+                    **report, "records": count, "writeSeconds": elapsed,
+                    "workloadRole": "SECONDARY_ACCELERATED_STRESS",
+                    "modeledBacklogRole": "NONBLOCKING_STRESS_METRIC_NOT_PRODUCTION_ADMISSION",
+                    "historicalQueueLimit": 128,
+                    "writeBudgetSeconds": SCALE_WRITE_BUDGET_SECONDS,
+                    "writeRate": count / elapsed,
+                    "correctness": "PASS",
+                    "sustainableThroughput": "PASS" if elapsed < SCALE_WRITE_BUDGET_SECONDS else "FAIL",
+                    "backlogRecovery": "PASS" if report["queuePeak"] <= 128 and report["backlogRecoverySeconds"] < SCALE_WRITE_BUDGET_SECONDS else "FAIL",
+                    "tailLatencyHealth": "WARNING" if report["over500ms"] else "HEALTHY",
+                }, sort_keys=True))
                 self.assertLess(elapsed, SCALE_WRITE_BUDGET_SECONDS)
+                # Engine007 physically qualifies the primary finite queue gate.
+                # Preserve this model and its FAIL output, but not its obsolete
+                # coupling to production admission. All other scale gates stay.
 
                 fixture.writer.close()
                 recovery_started = time.perf_counter()
@@ -648,6 +670,8 @@ class DedicatedEvidenceWriterScaleTests(unittest.TestCase):
                 )
                 recovery_elapsed = time.perf_counter() - recovery_started
                 fixture.writer = restarted
+                print("WRITER_SCALE_RECOVERY=" + json.dumps({"records": count,
+                    "recoverySeconds": recovery_elapsed, "recoveryBudgetSeconds": SCALE_RECOVERY_BUDGET_SECONDS}))
                 self.assertLess(recovery_elapsed, SCALE_RECOVERY_BUDGET_SECONDS)
             finally:
                 fixture.close()
