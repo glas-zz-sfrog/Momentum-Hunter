@@ -60,6 +60,11 @@ from .contract import (
 )
 from .coverage import CoverageSummary, derive_coverage
 from .outcomes import ValidatedOutcomeAttachment, parse_outcome_attachment
+from .reusable_views import (
+    ReusableViews, HistoryView, custody_operation, reusable_view, continuous_public_operation,
+    build_incremental_support,
+)
+from .verified_reads import VerifiedReads, VerifiedReadError
 
 
 TOPOLOGY_VERSION = 1
@@ -171,7 +176,8 @@ def _source_event_key(source_event_id: str) -> str:
 def _capture_time_evidence(value: str) -> dict[str, object]:
     parse_rfc3339(value, "recorder_capture_time")
     offset = "Z" if value.endswith("Z") else value[-6:]
-    precision = "subsecond" if "." in value else "second"
+    fraction = value[:-len(offset)].partition(".")[2]
+    precision = f"fractional-{len(fraction)}" if fraction else "second"
     return {
         "authority": "SCIENCE_RECORDER_CLOCK",
         "normalized_rfc3339": value,
@@ -256,6 +262,7 @@ class StrategyScienceRecorder:
         source_root_identity: str,
         writer_instance_id: str,
         clock: Callable[[], str],
+        reuse_verified_history: bool = False,
     ) -> None:
         self.science_root = Path(science_root)
         try:
@@ -287,6 +294,13 @@ class StrategyScienceRecorder:
             topology_version=TOPOLOGY_VERSION,
         )
         self._closed = False
+        self._views = None
+        if reuse_verified_history:
+            try:
+                self._views = ReusableViews(self._storage)
+            except BaseException:
+                self._storage.close()
+                raise
 
     @property
     def owner_evidence(self) -> object:
@@ -308,8 +322,12 @@ class StrategyScienceRecorder:
     def close(self) -> None:
         if self._closed:
             return
-        self._storage.close()
-        self._closed = True
+        try:
+            if self._views is not None:
+                self._views.close()
+        finally:
+            self._storage.close()
+            self._closed = True
 
     def _capture_time(self) -> str:
         value = self._clock()
@@ -327,6 +345,18 @@ class StrategyScienceRecorder:
         """Reuse a staged payload's exact custody clock across partial replay."""
 
         observed: set[str] = set()
+        if self._views is not None and self._views.depth:
+            index = self._indexed_payloads()
+            candidates = index['sources'].get(source_envelope_sha256,())
+            for _path, value in candidates:
+                capture = require_time_evidence(value.get('recorder_capture_time'),
+                    'recorder_capture_time',role='RECORDER_CAPTURE_TIME')
+                if capture['state'] != 'PRESENT':
+                    raise RecorderRecoveryError('Staged payload lacks a PRESENT capture clock.')
+                observed.add(str(capture['normalized_rfc3339']))
+            if len(observed) > 1:
+                raise RecorderRecoveryError('One source tail has inconsistent staged capture clocks.')
+            return next(iter(observed)) if observed else self._capture_time()
         for channel in ("session", "discovery", "decision", "market", "health", "outcome"):
             for path in self._files(partition / "payloads" / channel, ".payload.json"):
                 value, _raw = self._read_canonical(path, "staged payload")
@@ -351,7 +381,7 @@ class StrategyScienceRecorder:
             {
                 "byte_length": path.stat().st_size,
                 "partial_name": path.name,
-                "sha256": sha256_hex(path.read_bytes()),
+                "sha256": sha256_hex(self._read_raw(path)),
             }
             for path in self._files(PurePath(".partial"), ".tmp")
         ]
@@ -365,7 +395,7 @@ class StrategyScienceRecorder:
             {
                 "byte_length": path.stat().st_size,
                 "quarantine_name": path.name,
-                "sha256": sha256_hex(path.read_bytes()),
+                "sha256": sha256_hex(self._read_raw(path)),
             }
             for path in self._files(PurePath(".quarantine"), ".tmp")
         ]
@@ -394,25 +424,52 @@ class StrategyScienceRecorder:
             else:
                 record["post_quarantine_match_state"] = "TARGET_METADATA_NOT_PROVEN"
                 record["surviving_exact_byte_match_count"] = len(matches)
-            self._storage.atomic_create(receipt_path, canonical_json_bytes(record))
+            self._atomic_create(receipt_path, canonical_json_bytes(record))
 
     def _files(self, relative: PurePath, suffix: str) -> tuple[Path, ...]:
         try:
+            if self._views is not None:
+                return self._views.files(relative, suffix)
             return self._storage.iter_files(relative, suffix=suffix)
         except WriterPhysicalStorageError as exc:
             raise RecorderRecoveryError(str(exc)) from exc
 
     def _read_canonical(self, path: Path, label: str) -> tuple[Mapping[str, object], bytes]:
         try:
+            if self._views is not None and self._views.depth:
+                raw = self._read_raw(path)
+                if path not in self._views.json:
+                    self._views.json[path] = strict_json_loads(raw)
+                if canonical_json_bytes(self._views.json[path]) != raw:
+                    raise RecorderRecoveryError('Derived JSON differs from its exact raw authority.')
+                return self._views.json[path], raw
             stat = path.stat(follow_symlinks=False)
             if path.is_symlink() or stat.st_nlink != 1:
                 raise RecorderRecoveryError(
                     f"Persisted {label} is a reparse/link alias rather than one custody file."
                 )
-            raw = path.read_bytes()
+            raw = self._read_raw(path)
             return strict_json_loads(raw), raw
         except (OSError, CanonicalizationError) as exc:
             raise RecorderRecoveryError(f"Invalid persisted {label}: {path.name}.") from exc
+
+    def _read_raw(self, path: Path) -> bytes:
+        relative = path.relative_to(self._storage.root)
+        if self._views is not None and self._views.depth and relative.parts[0] == 'sessions':
+            return self._views.reads.read(path)
+        return path.read_bytes()
+
+    def _atomic_create(self, relative: PurePath, raw: bytes) -> bool:
+        created = self._storage.atomic_create(relative, raw)
+        if self._views is not None:
+            if self._storage.read_committed(relative) != raw:
+                raise RecorderRecoveryError('Canonical Writer005 committed readback differs from exact bytes.')
+            self._views.published(relative)
+            # Do not advance reusable state on speculative caller bytes. Re-read
+            # the physically installed, singleton raw object under R-coherence.
+            if self._read_raw(self._storage.root / Path(relative)) != raw:
+                raise RecorderRecoveryError('Installed custody bytes differ from publication input.')
+        return created
 
     def _relative(self, path: Path) -> str:
         try:
@@ -433,10 +490,32 @@ class StrategyScienceRecorder:
         )
         return PurePath("sessions", date_value, session_key)
 
+    def _indexed_payloads(self):
+        """Incremental source-clock and START lookups, including raw orphan tails."""
+        assert self._views is not None
+        if self._views.payload_index is None:
+            self._views.payload_index = {'count':0,'sources':{},'starts':[]}
+        index = self._views.payload_index
+        paths = self._files(PurePath('sessions'),'.payload.json')
+        for path in paths[index['count']:]:
+            value, _raw = self._read_canonical(path,'payload')
+            source = value.get('source_envelope_sha256')
+            if isinstance(source,str):
+                index['sources'].setdefault(source,[]).append((path,value))
+            if value.get('record_type') == 'session-manifest' and value.get('manifest_phase') == 'START':
+                index['starts'].append((path,value))
+        index['count'] = len(paths)
+        return index
+
+    @reusable_view
     def _start_records(self) -> tuple[tuple[PurePath, Mapping[str, object]], ...]:
         results: list[tuple[PurePath, Mapping[str, object]]] = []
-        for path in self._files(PurePath("sessions"), ".payload.json"):
-            value, _raw = self._read_canonical(path, "payload")
+        if self._views is not None and self._views.depth:
+            candidates = sorted(self._indexed_payloads()['starts'],key=lambda item:item[0])
+        else:
+            candidates = ((path,self._read_canonical(path,'payload')[0])
+                          for path in self._files(PurePath('sessions'),'.payload.json'))
+        for path, value in candidates:
             if value.get("record_type") != "session-manifest" or value.get("manifest_phase") != "START":
                 continue
             relative = PurePath(self._relative(path))
@@ -457,6 +536,7 @@ class StrategyScienceRecorder:
             )
         return matches[0]
 
+    @reusable_view
     def _start_record(self, partition: PurePath) -> Mapping[str, object]:
         matches: list[Mapping[str, object]] = []
         for path in self._files(partition / "payloads" / "session", ".payload.json"):
@@ -467,6 +547,7 @@ class StrategyScienceRecorder:
             raise RecorderRecoveryError("Partition does not contain exactly one START manifest.")
         return matches[0]
 
+    @reusable_view
     def _source_final_records(self, partition: PurePath) -> tuple[Mapping[str, object], ...]:
         matches: list[Mapping[str, object]] = []
         for path in self._files(partition / "payloads" / "session", ".payload.json"):
@@ -495,7 +576,7 @@ class StrategyScienceRecorder:
     ) -> tuple[list[dict[str, object]], dict[str, int]]:
         stream_ids: set[str] = set()
         for path in self._files(partition / "sources" / "export", ".source.json"):
-            parsed = parse_export_envelope(path.read_bytes())
+            parsed = parse_export_envelope(self._read_raw(path))
             stream_ids.add(parsed.stream_id)
         heads: list[dict[str, object]] = []
         counts = {event_type: 0 for event_type in EVENT_CHANNEL}
@@ -575,9 +656,9 @@ class StrategyScienceRecorder:
             stream_ids: set[str] = set()
             for path in paths:
                 parsed = (
-                    parse_export_envelope(path.read_bytes())
+                    parse_export_envelope(self._read_raw(path))
                     if source_kind == "export"
-                    else parse_outcome_attachment(path.read_bytes())
+                    else parse_outcome_attachment(self._read_raw(path))
                 )
                 stream_ids.add(parsed.stream_id)
             committed = sum(
@@ -586,7 +667,7 @@ class StrategyScienceRecorder:
             )
             current_final_source_present = (
                 source_kind == "export"
-                and any(sha256_hex(path.read_bytes()) == envelope.raw_sha256 for path in paths)
+                and any(sha256_hex(self._read_raw(path)) == envelope.raw_sha256 for path in paths)
             )
             allowed_uncheckpointed = 1 if current_final_source_present else 0
             if len(paths) - committed != allowed_uncheckpointed:
@@ -607,6 +688,74 @@ class StrategyScienceRecorder:
             raise RecorderCustodyError("Finalized session is immutable and accepts no new records.")
 
     def _channel_state(self, partition: PurePath, channel: str) -> _ChannelState:
+        views = self._views
+        if views is None or not views.depth:
+            return self._rebuild_channel_state(partition, channel)
+        cache_key = (partition, channel)
+        payload_paths = self._files(partition / 'payloads' / channel, '.payload.json')
+        receipt_paths = self._files(partition / 'receipts' / channel, '.receipt.json')
+        prior = views.channels.get(cache_key)
+        if prior is None:
+            state = self._rebuild_channel_state(partition, channel)
+            views.counters['channel_rebuilds'] += 1
+            views.channels[cache_key] = (len(payload_paths), len(receipt_paths), state)
+            return state
+        payload_count, receipt_count, state = prior
+        if payload_count == len(payload_paths) and receipt_count == len(receipt_paths):
+            return state
+        # Only our own immutable publications extend these append-ordered lists.
+        # An external namespace delta clears every semantic view at the boundary.
+        payloads, receipts = state.payloads, state.receipts
+        orphan_keys = set(state.orphan_payload_keys)
+        for path in payload_paths[payload_count:]:
+            value, raw = self._read_canonical(path, f'{channel} payload')
+            key = path.name.removesuffix('.payload.json')
+            record_id = value.get('record_id')
+            if (not isinstance(record_id, Mapping)
+                    or _record_key(str(record_id.get('recorder_id', ''))) != key
+                    or value.get('channel') != channel or key in payloads):
+                raise RecorderRecoveryError('Incremental payload filename/channel/logical ID is invalid.')
+            payloads[key] = (path, value, raw)
+            orphan_keys.add(key)
+            views.counters['channel_tail_payloads'] += 1
+        new_receipts = []
+        for path in receipt_paths[receipt_count:]:
+            value, raw = self._read_canonical(path, f'{channel} receipt')
+            key = path.name.removesuffix('.receipt.json')
+            if value.get('record_key_sha256') != key or key in receipts or key not in payloads:
+                raise RecorderRecoveryError('Incremental receipt is duplicate, misbound or ahead of payload.')
+            sequence = value.get('record_sequence')
+            payload = payloads[key][1]
+            if (value.get('receipt_version') != RECEIPT_VERSION
+                    or isinstance(sequence, bool) or not isinstance(sequence, int)
+                    or payload.get('record_sequence') != sequence
+                    or value.get('payload_sha256') != sha256_hex(payloads[key][2])
+                    or value.get('record_id') != payload.get('record_id')):
+                raise RecorderRecoveryError('Incremental payload/receipt tuple does not verify.')
+            new_receipts.append((sequence, key, path, value, raw))
+        previous = state.last_receipt_sha256
+        last_sequence = state.last_sequence
+        for sequence, key, path, value, raw in sorted(new_receipts):
+            if sequence != last_sequence + 1:
+                raise RecorderRecoveryError('Incremental receipt chain is not contiguous.')
+            predecessor = value.get('previous_receipt_sha256')
+            if not isinstance(predecessor, Mapping) or (
+                    predecessor.get('state') != 'NOT_APPLICABLE' if sequence == 1
+                    else predecessor.get('value') != previous):
+                raise RecorderRecoveryError('Incremental receipt predecessor is invalid.')
+            receipts[key] = (path, value, raw)
+            orphan_keys.remove(key)
+            previous = sha256_hex(raw)
+            last_sequence = sequence
+            views.counters['channel_tail_receipts'] += 1
+        if len(orphan_keys) > 1 or any(
+                payloads[key][1].get('record_sequence') != last_sequence + 1 for key in orphan_keys):
+            raise RecorderRecoveryError('Uncommitted payload is not the unique chain tail.')
+        state = _ChannelState(channel, payloads, receipts, tuple(sorted(orphan_keys)), last_sequence, previous)
+        views.channels[cache_key] = (len(payload_paths), len(receipt_paths), state)
+        return state
+
+    def _rebuild_channel_state(self, partition: PurePath, channel: str) -> _ChannelState:
         payloads: dict[str, tuple[Path, Mapping[str, object], bytes]] = {}
         receipts: dict[str, tuple[Path, Mapping[str, object], bytes]] = {}
         for path in self._files(partition / "payloads" / channel, ".payload.json"):
@@ -689,19 +838,32 @@ class StrategyScienceRecorder:
                 return True
         return False
 
+    @reusable_view
     def _stream_state(
         self, partition: PurePath, source_kind: str, stream_id: str
     ) -> _StreamState:
         source_dir, checkpoint_dir = self._stream_paths(partition, source_kind, stream_id)
-        sources: dict[str, tuple[Path, bytes]] = {}
-        for path in self._files(source_dir, ".source.json"):
-            raw = path.read_bytes()
+        source_paths = self._files(source_dir, '.source.json')
+        checkpoint_paths = self._files(checkpoint_dir, '.checkpoint.json')
+        incremental = self._views is not None and self._views.depth
+        cache_key = (partition,source_kind,stream_id)
+        cached = self._views.streams.get(cache_key) if incremental else None
+        if cached is None:
+            sources = {}
+            source_count = checkpoint_count = 0
+            previous_state = _StreamState(source_kind,stream_id,(),0,GENESIS_SHA256,GENESIS_SHA256)
+        else:
+            sources, source_count, checkpoint_count, previous_state = cached
+            if source_count == len(source_paths) and checkpoint_count == len(checkpoint_paths):
+                return previous_state
+        for path in source_paths[source_count:]:
+            raw = self._read_raw(path)
             key = path.name.removesuffix(".source.json")
             if key in sources:
                 raise RecorderRecoveryError("Duplicate source-event key detected.")
             sources[key] = (path, raw)
         checkpoints: list[tuple[int, Mapping[str, object], bytes]] = []
-        for path in self._files(checkpoint_dir, ".checkpoint.json"):
+        for path in checkpoint_paths[checkpoint_count:]:
             value, raw = self._read_canonical(path, "checkpoint")
             supplied_hash = value.get("checkpoint_payload_sha256")
             material = dict(value)
@@ -717,10 +879,10 @@ class StrategyScienceRecorder:
                 raise RecorderRecoveryError("Checkpoint sequence is invalid.")
             checkpoints.append((sequence, value, raw))
         checkpoints.sort(key=lambda item: item[0])
-        previous_source = GENESIS_SHA256
-        previous_checkpoint = GENESIS_SHA256
-        normalized: list[Mapping[str, object]] = []
-        for expected, (sequence, checkpoint, checkpoint_raw) in enumerate(checkpoints, 1):
+        previous_source = previous_state.last_source_sha256
+        previous_checkpoint = previous_state.last_checkpoint_sha256
+        normalized = [] if incremental else list(previous_state.checkpoints)
+        for expected, (sequence, checkpoint, checkpoint_raw) in enumerate(checkpoints, previous_state.last_sequence + 1):
             if sequence != expected or checkpoint.get("checkpoint_sequence") != expected:
                 raise RecorderRecoveryError("Source checkpoints are not contiguous from one.")
             if checkpoint.get("previous_source_envelope_sha256") != previous_source:
@@ -774,14 +936,17 @@ class StrategyScienceRecorder:
             previous_source = str(checkpoint["source_envelope_sha256"])
             previous_checkpoint = sha256_hex(checkpoint_raw)
             normalized.append(checkpoint)
-        return _StreamState(
+        result = _StreamState(
             source_kind=source_kind,
             stream_id=stream_id,
-            checkpoints=tuple(normalized),
-            last_sequence=len(normalized),
+            checkpoints=(previous_state.checkpoints if isinstance(previous_state.checkpoints, HistoryView) else HistoryView().extended(previous_state.checkpoints)).extended(normalized) if incremental else tuple(normalized),
+            last_sequence=previous_state.last_sequence + len(normalized) if incremental else len(normalized),
             last_source_sha256=previous_source,
             last_checkpoint_sha256=previous_checkpoint,
         )
+        if incremental:
+            self._views.streams[cache_key] = (sources,len(source_paths),len(checkpoint_paths),result)
+        return result
 
     def _existing_source_result(
         self,
@@ -799,7 +964,7 @@ class StrategyScienceRecorder:
                 "Affected source stream is frozen by persistent conflict evidence."
             )
         state = self._stream_state(partition, source_kind, stream_id)
-        for checkpoint in state.checkpoints:
+        for checkpoint in (state.checkpoints.matching(source_event_id) if isinstance(state.checkpoints, HistoryView) else state.checkpoints):
             if checkpoint.get("source_event_id") != source_event_id:
                 continue
             if checkpoint.get("source_envelope_sha256") != raw_sha256:
@@ -826,17 +991,93 @@ class StrategyScienceRecorder:
     def _record_index(
         self, partition: PurePath
     ) -> dict[str, tuple[Mapping[str, object], bytes]]:
-        records: dict[str, tuple[Mapping[str, object], bytes]] = {}
+        incremental = self._views is not None and self._views.depth
+        if incremental:
+            if self._views.record_index is None:
+                self._views.record_index = {}
+                self._views.secondary.clear()
+            records, counts = self._views.record_index.setdefault(partition,({},{}))
+        else:
+            records, counts = {}, {}
         for channel in ("session", "discovery", "decision", "market", "health", "outcome"):
             state = self._channel_state(partition, channel)
-            for key in state.receipts:
+            count_key = (partition,channel)
+            if incremental:
+                paths = self._files(partition/'receipts'/channel,'.receipt.json')
+                keys = [path.name.removesuffix('.receipt.json') for path in paths[counts.get(count_key,0):]]
+            else:
+                keys = state.receipts
+            for key in keys:
                 _path, payload, raw = state.payloads[key]
                 identity = payload.get("record_id")
                 recorder_id = str(identity.get("recorder_id", "")) if isinstance(identity, Mapping) else ""
                 if not recorder_id or recorder_id in records:
                     raise RecorderRecoveryError("Accepted record identity index is ambiguous.")
                 records[recorder_id] = (payload, raw)
+                if incremental:
+                    self._views.secondary.setdefault(('type', partition, payload.get('record_type')), []).append((payload, raw))
+            if incremental:
+                counts[count_key] = len(paths)
         return records
+
+    def _record_type_entries(self, partition, record_type):
+        records = self._record_index(partition)
+        if self._views is not None and self._views.depth:
+            return self._views.secondary.get(('type', partition, record_type), ())
+        return tuple(pair for pair in records.values() if pair[0].get('record_type') == record_type)
+
+    def verify_commit_delta(self, envelope, result):
+        """Prove this exact durable delta, never claim a whole-history audit.
+
+        Only available inside an explicitly startup-verified incremental scope.
+        The stream/channel tail validators retain all existing chain checks;
+        touched source, checkpoint, payloads and receipts are read back again.
+        """
+        if self._views is None or not self._views.incremental or not self._views.depth:
+            raise RecorderRecoveryError('Delta proof requires an owned incremental generation.')
+        self._views.check_changes()
+        partition = self._locate_partition(envelope.session_id)
+        source_kind = result.source_kind
+        state = self._stream_state(partition, source_kind, envelope.stream_id)
+        matches = state.checkpoints.matching(envelope.source_event_id)
+        if len(matches) != 1:
+            raise RecorderRecoveryError('New commit is not in its authoritative checkpoint chain.')
+        checkpoint = matches[0]
+        if (result.source_event_id != envelope.source_event_id or result.source_sequence != envelope.source_sequence
+                or checkpoint['source_envelope_sha256'] != envelope.raw_sha256
+                or checkpoint['source_sequence'] != envelope.source_sequence
+                or checkpoint['checkpoint_payload_sha256'] != result.checkpoint_sha256
+                or tuple(checkpoint['accepted_record_ids']) != result.record_ids):
+            raise RecorderRecoveryError('Delta result/source/checkpoint identities disagree.')
+        source_dir, checkpoint_dir = self._stream_paths(partition, source_kind, envelope.stream_id)
+        source_key = _source_event_key(envelope.source_event_id)
+        source_path = self.science_root / Path(source_dir) / f'{source_key}.source.json'
+        checkpoint_path = self.science_root / Path(checkpoint_dir) / f'{envelope.source_sequence:020d}-{source_key}.checkpoint.json'
+        if self._read_raw(source_path) != envelope.raw_bytes or self._read_canonical(checkpoint_path, 'delta checkpoint')[0] != checkpoint:
+            raise RecorderRecoveryError('Installed source/checkpoint differs from validated delta.')
+        channel = self._channel_state(partition, str(checkpoint['channel']))
+        records = []
+        for record_id, payload_hash, receipt_hash in zip(result.record_ids, checkpoint['accepted_payload_sha256s'], checkpoint['accepted_receipt_sha256s']):
+            key = _record_key(record_id)
+            payload_path, _value, _raw = channel.payloads[key]
+            receipt_path, _receipt, _receipt_raw = channel.receipts[key]
+            payload, raw = self._read_canonical(payload_path, 'delta payload')
+            receipt, receipt_raw = self._read_canonical(receipt_path, 'delta receipt')
+            if sha256_hex(raw) != payload_hash or sha256_hex(receipt_raw) != receipt_hash or receipt['payload_sha256'] != payload_hash or payload['record_id']['recorder_id'] != record_id:
+                raise RecorderRecoveryError('Installed payload/receipt does not bind new delta.')
+            records.append((payload, raw))
+        self._views.check_changes()
+        return tuple(records)
+
+    def _outcome_slot_entries(self, partition, slot):
+        entries = self._record_type_entries(partition, 'outcome-observation')
+        if self._views is None or not self._views.depth:
+            return tuple(pair for pair in entries if _outcome_slot(pair[0]) == slot)
+        index = self._views.secondary.setdefault(('outcome-slots', partition), {'count': 0, 'slots': {}})
+        for pair in entries[index['count']:]:
+            index['slots'].setdefault(_outcome_slot(pair[0]), []).append(pair)
+        index['count'] = len(entries)
+        return index['slots'].get(slot, ())
 
     def _persist_conflict(
         self,
@@ -867,7 +1108,7 @@ class StrategyScienceRecorder:
         existing = self._files(partition / "conflicts", f"{conflict_key}.conflict.json")
         if existing:
             return
-        self._storage.atomic_create(raw_path, conflicting_raw)
+        self._atomic_create(raw_path, conflicting_raw)
         record = {
             "accepted_payload_sha256": accepted_sha256,
             "authority": AUTHORITY,
@@ -884,7 +1125,7 @@ class StrategyScienceRecorder:
             "source_kind": source_kind,
             "stream_id": stream_id,
         }
-        self._storage.atomic_create(record_path, canonical_json_bytes(record))
+        self._atomic_create(record_path, canonical_json_bytes(record))
 
     def _base_record(
         self,
@@ -1436,14 +1677,15 @@ class StrategyScienceRecorder:
             )
         return value
 
+    @reusable_view
     def _science_eligibility_by_instrument(
         self,
         partition: PurePath,
     ) -> dict[str, tuple[Mapping[str, object], Mapping[str, object]]]:
-        result: dict[
-            str, tuple[Mapping[str, object], Mapping[str, object]]
-        ] = {}
-        for record, _raw in self._record_index(partition).values():
+        entries = self._record_type_entries(partition, 'science-eligibility')
+        index = self._views.secondary.setdefault(('validated-science-eligibility', partition), {'count': 0, 'values': {}}) if self._views is not None and self._views.depth else {'count': 0, 'values': {}}
+        result = index['values']
+        for record, _raw in entries[index['count']:]:
             if record.get("record_type") != "science-eligibility":
                 continue
             material = self._validate_science_eligibility_record(partition, record)
@@ -1454,6 +1696,7 @@ class StrategyScienceRecorder:
                     "One instrument has conflicting Science eligibility records."
                 )
             result[fingerprint] = (record, material)
+        index['count'] = len(entries)
         return result
 
     def _science_eligibility_for_observation(
@@ -1941,7 +2184,7 @@ class StrategyScienceRecorder:
                     **common,
                 )
             ]
-            eligibility_by_instrument = self._existing_eligibility_by_instrument(partition)
+            eligibility_by_instrument = self._existing_eligibility_by_instrument(partition) if envelope.schema_version == SCHEMA_VERSION else {}
             for observation in observations:
                 core = dict(observation)
                 if envelope.schema_version == REPAIRED_EXPORT_SCHEMA_VERSION:
@@ -2081,7 +2324,7 @@ class StrategyScienceRecorder:
             payload = dict(record)
             payload["record_sequence"] = state.last_sequence + 1
             payload_bytes = canonical_json_bytes(payload)
-            self._storage.atomic_create(
+            self._atomic_create(
                 partition / "payloads" / channel / f"{key}.payload.json",
                 payload_bytes,
             )
@@ -2124,7 +2367,7 @@ class StrategyScienceRecorder:
                 "source_payload_sha256": record["source_payload_sha256"],
             }
             receipt_bytes = canonical_json_bytes(receipt)
-            self._storage.atomic_create(
+            self._atomic_create(
                 partition / "receipts" / channel / f"{key}.receipt.json",
                 receipt_bytes,
             )
@@ -2172,7 +2415,7 @@ class StrategyScienceRecorder:
         if self._stream_is_frozen(partition, source_kind, stream_id):
             raise RecorderConflictError("Affected source stream is frozen by persistent conflict evidence.")
         state = self._stream_state(partition, source_kind, stream_id)
-        for checkpoint in state.checkpoints:
+        for checkpoint in (state.checkpoints.matching(source_event_id) if isinstance(state.checkpoints, HistoryView) else state.checkpoints):
             if checkpoint["source_event_id"] == source_event_id:
                 if checkpoint["source_envelope_sha256"] != raw_sha256:
                     self._persist_conflict(
@@ -2212,13 +2455,13 @@ class StrategyScienceRecorder:
         source_dir, checkpoint_dir = self._stream_paths(partition, source_kind, stream_id)
         source_key = _source_event_key(source_event_id)
         source_path = source_dir / f"{source_key}.source.json"
-        existing_sources = [
+        existing_sources = ([self.science_root / Path(source_path)] if self._views is not None and self._views.depth and self.science_root / Path(source_path) in self._views.namespace else []) if self._views is not None and self._views.depth else [
             path
             for path in self._files(source_dir, ".source.json")
             if path.name == f"{source_key}.source.json"
         ]
         if existing_sources:
-            existing_raw = existing_sources[0].read_bytes()
+            existing_raw = self._read_raw(existing_sources[0])
             if existing_raw != raw_bytes:
                 self._persist_conflict(
                     partition,
@@ -2231,7 +2474,7 @@ class StrategyScienceRecorder:
                 )
                 raise RecorderConflictError("Source event identity conflicts with staged bytes.")
         else:
-            self._storage.atomic_create(source_path, raw_bytes)
+            self._atomic_create(source_path, raw_bytes)
         if crash_phase == "after_source":
             raise SimulatedRecorderCrash("Synthetic interruption after exact source preservation.")
         record_ids: list[str] = []
@@ -2360,7 +2603,7 @@ class StrategyScienceRecorder:
         checkpoint["checkpoint_payload_sha256"] = sha256_hex(canonical_json_bytes(checkpoint))
         checkpoint_bytes = canonical_json_bytes(checkpoint)
         checkpoint_name = f"{source_sequence:020d}-{source_key}.checkpoint.json"
-        self._storage.atomic_create(checkpoint_dir / checkpoint_name, checkpoint_bytes)
+        self._atomic_create(checkpoint_dir / checkpoint_name, checkpoint_bytes)
         verified = self._stream_state(partition, source_kind, stream_id)
         if verified.last_sequence != source_sequence:
             raise RecorderRecoveryError("New immutable checkpoint did not verify.")
@@ -2373,6 +2616,7 @@ class StrategyScienceRecorder:
             checkpoint_sha256=str(checkpoint["checkpoint_payload_sha256"]),
         )
 
+    @custody_operation
     def accept(
         self, raw_envelope: bytes, *, crash_phase: str | None = None
     ) -> AcceptanceResult:
@@ -2585,6 +2829,7 @@ class StrategyScienceRecorder:
         elif bar_intervals:
             raise RecorderContractError("Non-PRESENT outcome cannot bind canonical bars.")
 
+    @custody_operation
     def append_outcome(
         self, raw_attachment: bytes, *, crash_phase: str | None = None
     ) -> AcceptanceResult:
@@ -2612,7 +2857,7 @@ class StrategyScienceRecorder:
         incoming_identity = str(
             attachment.payload["outcome_observation_id"]["recorder_id"]
         )
-        for existing, existing_raw in self._record_index(partition).values():
+        for existing, existing_raw in self._outcome_slot_entries(partition, incoming_slot):
             if existing.get("record_type") != "outcome-observation":
                 continue
             if _outcome_slot(existing) != incoming_slot:
@@ -2686,7 +2931,7 @@ class StrategyScienceRecorder:
             for path in self._files(
                 partition / "sources" / source_kind, ".source.json"
             ):
-                raw = path.read_bytes()
+                raw = self._read_raw(path)
                 parsed = (
                     parse_export_envelope(raw)
                     if source_kind == "export"
@@ -2765,15 +3010,17 @@ class StrategyScienceRecorder:
                 raise RecorderRecoveryError(
                     "Final manifest exists without its detached checksum sidecar."
                 )
-            self._storage.atomic_create(expected_path, expected)
+            self._atomic_create(expected_path, expected)
             sidecars = self._files(partition / "manifests", ".sha256")
         if len(sidecars) != 1:
             raise RecorderRecoveryError("Final manifest detached checksum is ambiguous.")
-        actual = sidecars[0].read_bytes()
+        actual = self._read_raw(sidecars[0])
         if actual != expected:
             raise RecorderRecoveryError("Detached checksum target set or bytes do not verify.")
         return sidecars[0], actual
 
+    @custody_operation
+    @reusable_view
     def verify(self, session_id: Mapping[str, object]) -> VerificationReport:
         """Mechanically verify persisted source, chains, checkpoints, and final receipt."""
 
@@ -2830,7 +3077,7 @@ class StrategyScienceRecorder:
         for source_kind in ("export", "outcome"):
             base = partition / "sources" / source_kind
             for path in self._files(base, ".source.json"):
-                raw = path.read_bytes()
+                raw = self._read_raw(path)
                 parsed = (
                     parse_export_envelope(raw)
                     if source_kind == "export"
@@ -2888,7 +3135,7 @@ class StrategyScienceRecorder:
             relative = conflict.get("conflicting_bytes_relative_path")
             if not isinstance(relative, str) or relative not in conflict_raw_paths:
                 raise RecorderRecoveryError("Conflict evidence does not resolve exact raw bytes.")
-            raw_bytes = conflict_raw_paths[relative].read_bytes()
+            raw_bytes = self._read_raw(conflict_raw_paths[relative])
             if conflict.get("conflicting_payload_sha256") != sha256_hex(raw_bytes):
                 raise RecorderRecoveryError("Conflict raw-byte hash does not verify.")
             referenced_conflict_raw.add(relative)
@@ -3121,7 +3368,7 @@ class StrategyScienceRecorder:
                     raise RecorderRecoveryError("Final manifest inventory item is malformed.")
                 relative = str(item.get("relative_path", ""))
                 path = self._storage.root / Path(relative)
-                raw = path.read_bytes()
+                raw = self._read_raw(path)
                 if (
                     item.get("byte_length") != len(raw)
                     or item.get("sha256") != sha256_hex(raw)
@@ -3140,6 +3387,7 @@ class StrategyScienceRecorder:
             all_hashes_valid=True,
         )
 
+    @custody_operation
     def recover(self) -> tuple[VerificationReport, ...]:
         """Rebuild safe cursors from immutable sources; never trusts wall-clock or mtime."""
 
@@ -3152,7 +3400,7 @@ class StrategyScienceRecorder:
                 relative = self._relative(path)
                 if f"/sources/{source_kind}/" not in f"/{relative}":
                     continue
-                raw = path.read_bytes()
+                raw = self._read_raw(path)
                 parsed = (
                     parse_export_envelope(raw)
                     if source_kind == "export"
@@ -3251,6 +3499,7 @@ class StrategyScienceRecorder:
                 seen.add(recorder_id)
         return tuple(reports)
 
+    @custody_operation
     def finalize(
         self,
         session_id: Mapping[str, object],
@@ -3305,7 +3554,7 @@ class StrategyScienceRecorder:
             {
                 "byte_length": path.stat().st_size,
                 "relative_path": self._relative(path),
-                "sha256": sha256_hex(path.read_bytes()),
+                "sha256": sha256_hex(self._read_raw(path)),
             }
             for path in unique_paths
         ]
@@ -3423,7 +3672,7 @@ class StrategyScienceRecorder:
         manifest_path = partition / "manifests" / f"{manifest_key}.final.json"
         manifest_bytes = canonical_json_bytes(manifest)
         with self._storage.transaction():
-            self._storage.atomic_create(manifest_path, manifest_bytes)
+            self._atomic_create(manifest_path, manifest_bytes)
         if crash_phase == "after_manifest":
             raise SimulatedRecorderCrash(
                 "Synthetic interruption after final manifest before detached checksum."
