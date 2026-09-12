@@ -53,7 +53,8 @@ class IncrementalScienceReader(StrategyScienceSourceReaderV2):
             self._check_cursor()
             return self._view
         if self._cursor_reads is None:
-            self._cursor_changes = DirectoryChanges(self.cursor_root, recursive=True)
+            # Published cursors are flat; .partial contents are not authority.
+            self._cursor_changes = DirectoryChanges(self.cursor_root)
             self._cursor_reads = VerifiedReads(self.cursor_root, aggregate_content=True)
         value = super()._load_state()
         heads = StreamHeads()

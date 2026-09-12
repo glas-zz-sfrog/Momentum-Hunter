@@ -28,6 +28,7 @@ from momentum_hunter.strategy_science_recorder.custody import (
     VerifiedReads, VerifiedReadError, continuous_public_operation, build_incremental_support,
 )
 from momentum_hunter.strategy_science_recorder.outcomes import parse_outcome_attachment
+from momentum_hunter.strategy_science_recorder.namespace_changes import NamespaceRecoveryRequired
 from momentum_hunter.strategy_science_source_reader import (
     SimulatedSourceReaderCrash, StrategyScienceSourceReaderV2,
 )
@@ -216,7 +217,8 @@ class ContinuousScienceRecorder:
         """I/O interruption leaves recoverable primary custody, not a semantic reject."""
         while exc is not None:
             if isinstance(exc, (OSError, WriterPhysicalStorageError, SimulatedRecorderCrash,
-                                SimulatedSourceReaderCrash, SimulatedContinuousCrash)):
+                                SimulatedSourceReaderCrash, SimulatedContinuousCrash,
+                                NamespaceRecoveryRequired)):
                 return True
             exc = exc.__cause__
         return False

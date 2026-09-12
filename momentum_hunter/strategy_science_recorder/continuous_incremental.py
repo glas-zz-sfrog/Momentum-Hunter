@@ -14,7 +14,7 @@ from ..continuous_research_export import PUBLICATION_FILE
 from .canonical import canonical_json_v1, parse_rfc3339, sha256_hex
 from .contract import GENESIS_SHA256
 from .verified_reads import VerifiedReads, VerifiedReadError, _identity
-from .namespace_changes import DirectoryChanges
+from .namespace_changes import DirectoryChanges, NamespaceRecoveryRequired
 from .incremental_reader import IncrementalScienceReader
 from .incremental_coverage import IncrementalCoverage
 from .incremental_state import PublicHistory
@@ -40,7 +40,7 @@ class ContinuousIncremental:
         try:
             self.producer_changes = DirectoryChanges(owner.publication_root)
             self.producer_reads = VerifiedReads(owner.publication_root, aggregate_content=True)
-            self.ledger_changes = DirectoryChanges(owner._storage.root, recursive=True)
+            self.ledger_changes = DirectoryChanges(owner._storage.root / 'ledger')
             self._baseline_producer()
             self._reset_event_views()
             self.sync_events()
@@ -197,23 +197,27 @@ class ContinuousIncremental:
 
     def ledger_published(self, path):
         self.ledger_names.add(path)
+        # Installed singleton/readback has completed. Bound name consumption
+        # per committed receipt, including large arrival batches.
+        self._check_ledger()
 
     def _check_ledger(self):
         self.owner._ledger_reads.check_content()
         for name in self.ledger_changes.drain():
-            path = self.owner._storage.root / name
-            if Path(name).parts[0] != 'ledger':
-                continue
-            if name == 'ledger':
-                if not path.is_dir() or path.is_symlink():
-                    raise VerifiedReadError('Ledger directory is missing or redirected.')
-                continue
+            path = self.ledger_changes.root / name
             if path not in self.ledger_names:
                 raise VerifiedReadError('Ledger namespace is ahead of locally verified commits.')
             self.owner._ledger_reads.read(path)
         self.owner._ledger_reads.check_content()
 
     def ensure_ready(self):
+        # Native loss poisons that generation; never clear it via ordinary
+        # same-instance crash recovery. Reopen registers fresh guards before
+        # canonical full raw-custody audit and idempotent reconciliation.
+        guards = (self.producer_changes, self.ledger_changes,
+                  self.owner.recorder._views.changes, self.owner.reader._cursor_changes)
+        if any(guard.failed for guard in guards):
+            raise NamespaceRecoveryRequired('Namespace continuity lost; close/reopen for audited recovery required.')
         if not self.needs_recovery or self.recovering or self.owner._frozen():
             return
         self.recovering = True

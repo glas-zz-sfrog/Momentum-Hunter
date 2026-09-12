@@ -62,7 +62,9 @@ class ReusableViews:
         self.storage = storage
         self.reads = VerifiedReads(storage.root, aggregate_content=True)
         try:
-            self.changes = DirectoryChanges(storage.root, recursive=True)
+            # Only sessions is authoritative reusable custody. Staging and
+            # quarantine churn must not consume this finite native name queue.
+            self.changes = DirectoryChanges(storage.root / 'sessions', recursive=True)
         except BaseException:
             self.reads.close()
             raise
@@ -107,11 +109,19 @@ class ReusableViews:
             parent = parent.parent
 
     def check_changes(self):
+        try:
+            self._check_changes()
+        except BaseException:
+            # This also covers the initial full-audit check, before operation's
+            # body handler. A consumed invalidation cannot leave reusable views
+            # healthy on the next normal call.
+            self.failed = True
+            raise
+
+    def _check_changes(self):
         self.reads.check_content()
         for name in self.changes.drain():
-            relative = PurePath(name)
-            if relative.parts[0] != 'sessions':
-                continue  # Owner/partial/quarantine have separate explicit rules.
+            relative = PurePath('sessions', name)
             path = self.storage.root / Path(relative)
             if path in self.directories:
                 if _directory_identity(path) != self.directories[path]:
@@ -175,7 +185,7 @@ class ReusableViews:
                     self.secondary.clear()
                     self.generation += 1
                 self.namespace = current
-                self.changes.drain()  # Full inventory just established the baseline.
+                self.check_changes()  # Validate queued names against the audited baseline.
             self.depth += 1
             try:
                 if outer:
@@ -189,6 +199,8 @@ class ReusableViews:
                 yield
                 if outer and self._inventory() != self.namespace:
                     raise VerifiedReadError('Custody namespace changed outside the owned publication path.')
+                if outer:
+                    self.check_changes()
             except BaseException:
                 # A failed append may have installed raw custody before an index
                 # update. Never retain a speculative semantic view across it.
@@ -245,6 +257,12 @@ class ReusableViews:
             directory = directory.parent
         self.memo.clear()
         self.generation += 1
+
+        # One source envelope can publish hundreds of long-path custody files.
+        # Consume after each installed singleton is registered, not only after
+        # the entire envelope. Writer005's temporary hard link has retired and
+        # exact committed readback precedes this callback. No history scan here.
+        self.check_changes()
 
     def close(self):
         try:
