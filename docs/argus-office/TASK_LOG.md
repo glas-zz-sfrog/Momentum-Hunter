@@ -728,7 +728,16 @@ Protected areas require exact task scope and Hard Chew proof. Interrupt Steven b
   `F:\ArgusQualification\Governance\ARGUS-GOVERNANCE-AMENDMENT-HARNESS-REPAIR-AUTONOMY-001-20260915T034714Z`.
   Branch-only publication remains implemented-pending-merge until accepted
   serialized fast-forward; only that receipt establishes completed backup.
-- This governance task performs zero harness repairs. Failed-receipt retention
-  and affected-gate reruns are not applicable; product bytes changed by harness
-  repairs NO, production changed by harness repairs NO, security authority
-  expanded NO. Manual visual QA is not applicable.
+- One harness-only shell comparison was repaired: the pre-merge guard compared
+  a literal backtick-t against Git's actual tab separator. The failure stopped
+  before merge/push; canonical was unchanged. Failed receipt
+  `FAST-FORWARD-TRANSCRIPT.json` and
+  `HARNESS-001-AFFECTED-GATE-RETEST.json` preserve the failure and directly
+  affected exact-remote guard PASS. No invariant was weakened.
+- HARNESS_DEFECTS_AUTONOMOUSLY_REPAIRED = 1; FAILED_RECEIPTS_PRESERVED = YES;
+  AFFECTED_GATES_RERUN = EXACT_REMOTE_MASTER_COMPARISON / PASS.
+  PRODUCT_BYTES_CHANGED_BY_HARNESS_REPAIRS = NO;
+  PRODUCTION_CHANGED_BY_HARNESS_REPAIRS = NO; SECURITY_AUTHORITY_EXPANDED = NO.
+  The original frozen governance candidate remains immutable; its separately
+  frozen documentation-only successor updates these factual receipts.
+  Manual visual QA is not applicable.

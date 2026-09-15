@@ -15,9 +15,16 @@ local master, origin/master and direct remote at admission. Isolated worktree:
 This separately authorized governance update incorporates the completed
 Integration012 -> Science006 readmission; the historical Final009 queue must
 not reopen accepted producer/recorder work. It does not modify or re-review
-their frozen product candidates. No harness repair is performed by this task.
+their frozen product candidates. A pre-integration shell guard's literal-tab
+comparison defect was repaired without product or canonical mutation; failed
+receipt and affected-gate PASS are retained as HARNESS-001 evidence.
+The original frozen governance commit
+`c457434f08ea404460fa5f94dbec1f7224a4baae` remains on its original branch.
+The documentation-only reporting successor uses that commit's direct child on
+`codex/ARGUS-GOVERNANCE-AMENDMENT-HARNESS-REPAIR-AUTONOMY-001-receipt02`,
+with a new freeze and applicable independent review before admission.
 
-Actual frozen tree, scope/link/policy-case and secret/protected checks,
+Actual final frozen tree, scope/link/policy-case and secret/protected checks,
 independent Astra disposition, accepted commit and strict-fast-forward/non-force
 backup are recorded in `INTEGRATION-RECEIPT.json` and `FINAL-REPORT.md` at
 `F:\ArgusQualification\Governance\ARGUS-GOVERNANCE-AMENDMENT-HARNESS-REPAIR-AUTONOMY-001-20260915T034714Z`.

@@ -62,7 +62,10 @@ already-authorized tasks: preserve failures, prove a machinery-only root cause,
 repair minimally, retest the affected gate first and resume automatically on
 PASS, including second and later defects. Required acceptance suites and all
 product, production, frozen-review, security and authority boundaries remain.
-This task does not perform a harness or product repair.
+No product repair is performed. One pre-integration shell-comparison defect
+was repaired under this rule: a literal backtick-t was mistaken for Git's tab
+separator. The failed receipt was retained, the exact-identity guard rerun
+first and passed; canonical remained unchanged during that repair.
 
 At this task's admission on 2026-09-14, canonical local/master/origin/master
 and the direct remote were clean/synchronized at
