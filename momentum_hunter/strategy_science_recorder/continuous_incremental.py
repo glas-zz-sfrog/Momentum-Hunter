@@ -49,7 +49,8 @@ class ContinuousIncremental:
             raise
 
     def create_reader(self):
-        return IncrementalScienceReader(self.owner.publication_root, self.owner.science_root / 'reader', recorder=self.owner.recorder, publication_index=lambda: self.observed)
+        return IncrementalScienceReader(self.owner.publication_root, self.owner.science_root / 'reader', recorder=self.owner.recorder, publication_index=lambda: self.observed,
+                                       custody_storage_set=self.owner._custody_storage_set)
 
     def _baseline_producer(self):
         self.counters['producer_full_inventories'] += 1

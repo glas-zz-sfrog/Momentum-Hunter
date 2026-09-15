@@ -549,6 +549,7 @@ class ContinuousRecorderTests(unittest.TestCase):
             "momentum_hunter.strategy_science_recorder.custody", "momentum_hunter.strategy_science_recorder.outcomes",
             "momentum_hunter.strategy_science_recorder.namespace_changes",
             "momentum_hunter.strategy_science_source_reader", "momentum_hunter.windows_writer_storage",
+            "momentum_hunter.science_custody_commit", "momentum_hunter.science_custody_readonly",
         }
         self.assertEqual(set(imports), allowed)
         recorder = self.open()

@@ -263,6 +263,7 @@ class StrategyScienceRecorder:
         writer_instance_id: str,
         clock: Callable[[], str],
         reuse_verified_history: bool = False,
+        custody_storage_set=None,
     ) -> None:
         self.science_root = Path(science_root)
         try:
@@ -287,12 +288,21 @@ class StrategyScienceRecorder:
                 }
             )
         )
-        self._storage = WriterPhysicalStorage(
-            self.science_root,
-            writer_instance_id=writer_instance_id,
-            topology_fingerprint=topology_fingerprint,
-            topology_version=TOPOLOGY_VERSION,
-        )
+        self._custody_storage_set = custody_storage_set
+        if custody_storage_set is None:
+            self._storage = WriterPhysicalStorage(
+                self.science_root,
+                writer_instance_id=writer_instance_id,
+                topology_fingerprint=topology_fingerprint,
+                topology_version=TOPOLOGY_VERSION,
+            )
+        else:
+            from momentum_hunter.science_custody_readonly import ScienceCustodyStorageSet
+            if not isinstance(custody_storage_set, ScienceCustodyStorageSet):
+                raise RecorderCustodyError("Explicit sealed Science storage is required.")
+            self._storage = custody_storage_set.storage(
+                'custody', expected_root=self.science_root,
+                source_root_identity=self.source_root_identity)
         self._closed = False
         self._views = None
         if reuse_verified_history:
@@ -469,6 +479,10 @@ class StrategyScienceRecorder:
             # the physically installed, singleton raw object under R-coherence.
             if self._read_raw(self._storage.root / Path(relative)) != raw:
                 raise RecorderRecoveryError('Installed custody bytes differ from publication input.')
+        if self._custody_storage_set is not None:
+            if self._storage.read_committed(relative) != raw:
+                raise RecorderRecoveryError('Sealed custody readback differs from publication input.')
+            self._storage.publication_verified(relative, raw)
         return created
 
     def _relative(self, path: Path) -> str:

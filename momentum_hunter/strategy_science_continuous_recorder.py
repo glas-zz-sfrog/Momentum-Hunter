@@ -77,6 +77,7 @@ class ContinuousScienceRecorder:
         self, publication_root: Path, science_root: Path, *,
         source_root_identity: str, writer_instance_id: str,
         clock: Callable[[], str], lateness_seconds: int | None = None,
+        custody_storage_set=None,
     ) -> None:
         self.publication_root = Path(publication_root).resolve(strict=True)
         self.science_root = Path(science_root).resolve()
@@ -121,10 +122,19 @@ class ContinuousScienceRecorder:
             "retention": "APPEND_ONLY_NO_DELETION",
             "execution_authority": "NONE",
         }
-        self._storage = WriterPhysicalStorage(
-            self.science_root / "arrivals", writer_instance_id=writer_instance_id,
-            topology_fingerprint=sha256_hex(canonical_json_v1(descriptor)), topology_version=1,
-        )
+        self._custody_storage_set = custody_storage_set
+        if custody_storage_set is None:
+            self._storage = WriterPhysicalStorage(
+                self.science_root / "arrivals", writer_instance_id=writer_instance_id,
+                topology_fingerprint=sha256_hex(canonical_json_v1(descriptor)), topology_version=1,
+            )
+        else:
+            from momentum_hunter.science_custody_readonly import ScienceCustodyStorageSet
+            if not isinstance(custody_storage_set, ScienceCustodyStorageSet):
+                raise ContinuousRecorderError("Explicit sealed Science storage is required.")
+            self._storage = custody_storage_set.storage(
+                'arrivals', expected_root=self.science_root / 'arrivals',
+                source_root_identity=source_root_identity)
         self.recorder: StrategyScienceRecorder | None = None
         self.reader: StrategyScienceSourceReaderV2 | None = None
         self._ledger_reads = None
@@ -147,6 +157,7 @@ class ContinuousScienceRecorder:
                 self.science_root / "custody", source_root_identity=source_root_identity,
                 writer_instance_id=writer_instance_id, clock=clock,
                 reuse_verified_history=True,
+                custody_storage_set=custody_storage_set,
             )
             # Canonical recovery supports legacy profiles, so check every exact
             # source through this adapter's narrower ingress BEFORE that replay.
@@ -215,10 +226,11 @@ class ContinuousScienceRecorder:
     @staticmethod
     def _storage_interruption(exc: BaseException) -> bool:
         """I/O interruption leaves recoverable primary custody, not a semantic reject."""
+        from momentum_hunter.science_custody_commit import CustodyCommitError
         while exc is not None:
             if isinstance(exc, (OSError, WriterPhysicalStorageError, SimulatedRecorderCrash,
                                 SimulatedSourceReaderCrash, SimulatedContinuousCrash,
-                                NamespaceRecoveryRequired)):
+                                NamespaceRecoveryRequired, CustodyCommitError)):
                 return True
             exc = exc.__cause__
         return False
@@ -241,6 +253,8 @@ class ContinuousScienceRecorder:
             raise ContinuousRecorderError('Writer005 ledger readback differs from exact receipt bytes.')
         if self._support is not None:
             self._support.ledger_published(installed)
+        if self._custody_storage_set is not None:
+            self._storage.publication_verified(PurePath('ledger', installed.name), raw)
         self._events.append(entry)
         self._hashes.append(digest)
         return digest

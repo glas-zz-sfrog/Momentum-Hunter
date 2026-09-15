@@ -183,6 +183,7 @@ class StrategyScienceSourceReaderV2:
         state_root: Path,
         *,
         recorder: StrategyScienceRecorder,
+        custody_storage_set=None,
     ) -> None:
         if not isinstance(recorder, StrategyScienceRecorder):
             raise SourceReaderError(
@@ -197,7 +198,14 @@ class StrategyScienceSourceReaderV2:
         if not self.publication_root.is_dir():
             raise SourceReaderPublicationError("Publication root does not exist.")
         publication_resolved = self.publication_root.resolve(strict=True)
-        self.state_root.mkdir(parents=True, exist_ok=True)
+        self._custody_storage_set = custody_storage_set
+        self._cursor_storage = None
+        if custody_storage_set is None:
+            if getattr(recorder, '_custody_storage_set', None) is not None:
+                raise SourceReaderError('Sealed custody requires sealed cursor publication too.')
+            self.state_root.mkdir(parents=True, exist_ok=True)
+        elif custody_storage_set is not getattr(recorder, '_custody_storage_set', None):
+            raise SourceReaderError('Reader and recorder must share the exact sealed custody channel.')
         state_resolved = self.state_root.resolve(strict=True)
         try:
             state_resolved.relative_to(publication_resolved)
@@ -212,14 +220,22 @@ class StrategyScienceSourceReaderV2:
         else:
             raise SourceReaderError("Producer bytes cannot live under Science cursor state.")
         self.cursor_root = self.state_root / "cursors"
-        self.cursor_root.mkdir(parents=True, exist_ok=True)
         self.cursor_partial_root = self.cursor_root / CURSOR_PARTIAL_DIRECTORY
-        self.cursor_partial_root.mkdir(exist_ok=True)
-        if not self.cursor_partial_root.is_dir() or self.cursor_partial_root.is_symlink():
-            raise SourceReaderCursorError("Reader cursor partial namespace is invalid.")
+        if custody_storage_set is None:
+            self.cursor_root.mkdir(parents=True, exist_ok=True)
+            self.cursor_partial_root.mkdir(exist_ok=True)
+            if not self.cursor_partial_root.is_dir() or self.cursor_partial_root.is_symlink():
+                raise SourceReaderCursorError("Reader cursor partial namespace is invalid.")
+        else:
+            self._cursor_storage = custody_storage_set.storage(
+                'cursors', expected_root=self.cursor_root,
+                source_root_identity=recorder.source_root_identity)
+            if self.cursor_partial_root.exists():
+                raise SourceReaderCursorError('Sealed cursor staging must be outside committed raw.')
         self.recorder = recorder
         self._closed = False
-        self._lock = _ReaderLock(self.state_root / ".reader.lock")
+        lock_root = self.state_root if custody_storage_set is None else custody_storage_set.derived_root
+        self._lock = _ReaderLock(lock_root / ".reader.lock")
         self._lock.acquire()
         try:
             self._load_state()
@@ -675,11 +691,18 @@ class StrategyScienceSourceReaderV2:
         cursor_path = self.cursor_root / (
             f"{publication_ordinal:020d}-{cursor_sha}.reader-cursor.json"
         )
-        self._atomic_create(cursor_path, raw_cursor)
+        if self._cursor_storage is None:
+            self._atomic_create(cursor_path, raw_cursor)
+        else:
+            self._cursor_storage.atomic_create(PurePath(cursor_path.name), raw_cursor)
         self._cursor_committed(cursor_path, raw_cursor, envelope, custody, state)
         loaded = self._load_state()
         if loaded.last_publication_ordinal != publication_ordinal:
             raise SourceReaderCursorError("Durable reader cursor did not verify after commit.")
+        if self._cursor_storage is not None:
+            if self._cursor_storage.read_committed(PurePath(cursor_path.name)) != raw_cursor:
+                raise SourceReaderCursorError('Sealed cursor exact readback failed.')
+            self._cursor_storage.publication_verified(PurePath(cursor_path.name), raw_cursor)
         self._invoke(crash_phase, "after_cursor_commit")
         return SourceReaderAdmission(
             custody=custody,

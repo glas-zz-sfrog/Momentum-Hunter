@@ -17,12 +17,13 @@ import secrets
 import socket
 import socketserver
 import sys
+import threading
 import time
 from contextlib import ExitStack
 from dataclasses import asdict, dataclass
 from datetime import datetime, time as clock_time
 from pathlib import Path, PurePath
-from typing import Any, Mapping
+from typing import TYPE_CHECKING, Any, Mapping
 from zoneinfo import ZoneInfo
 
 from momentum_hunter.continuous_live_qualification import (
@@ -78,6 +79,9 @@ from momentum_hunter.continuous_evidence_writer import (
     build_production_continuous_writer_topology,
 )
 from momentum_hunter.scheduling import is_market_open_day, is_nyse_early_close
+
+if TYPE_CHECKING:
+    from momentum_hunter.windows_science_custody import ScienceCustodyPolicy
 
 
 CENTRAL = ZoneInfo("America/Chicago")
@@ -244,10 +248,124 @@ def deployment_configuration_fingerprint(config: Mapping[str, Any]) -> str:
     return _runtime_config(config).fingerprint
 
 
+def _open_science_custody_writer(policy: ScienceCustodyPolicy):
+    # Import and native root/account validation occur only in the opted-in
+    # Science thread. Production configuration and IPC credentials are not inputs.
+    from momentum_hunter.windows_science_custody import open_science_custody_writer
+
+    return open_science_custody_writer(policy)
+
+
+class _ScienceCustodyWorker:
+    """One separate, serial mailbox consumer; no in-memory work queue.
+
+    Each native poll admits at most one request and a policy-bounded artifact.
+    The interval bounds polling frequency, not native I/O duration or disk use.
+    A stopped/failed worker never deletes transport or interprets an uncertain
+    commit as failed. Its native owner closes handles on this same thread.
+    """
+
+    POLL_INTERVAL_SECONDS = 0.05
+    STOP_WAIT_SECONDS = 0.25
+
+    def __init__(self, policy: ScienceCustodyPolicy) -> None:
+        self._policy = policy
+        self._stop = threading.Event()
+        self._status_lock = threading.Lock()
+        self._status: dict[str, object] = {
+            "state": "STARTING",
+            "inFlight": False,
+            "pollCount": 0,
+            "receiptObservationCount": 0,
+            "errorCount": 0,
+            "lastError": None,
+        }
+        self._thread = threading.Thread(
+            target=self._run, name="science-custody-mailbox", daemon=True
+        )
+        try:
+            self._thread.start()
+        except Exception as exc:
+            self._set_status(state="START_FAILED", lastError=type(exc).__name__)
+
+    def _set_status(self, **values: object) -> None:
+        # No native call, filesystem access, or production operation under this lock.
+        with self._status_lock:
+            self._status.update(values)
+
+    def _increment(self, field: str) -> None:
+        with self._status_lock:
+            self._status[field] = min(int(self._status[field]) + 1, 2**63 - 1)
+
+    def snapshot(self) -> dict[str, object]:
+        with self._status_lock:
+            result = dict(self._status)
+        result["threadAlive"] = self._thread.is_alive()
+        result["stopRequested"] = self._stop.is_set()
+        if result["threadAlive"] and result["stopRequested"]:
+            result["state"] = "STOP_PENDING"
+        return result
+
+    def request_stop(self) -> None:
+        self._stop.set()
+
+    def wait_stopped(self) -> None:
+        if self._thread.is_alive():
+            # A Python timeout cannot cancel a blocked native operation. Preserve
+            # STOP_PENDING and the worker/lease until that operation returns.
+            self._thread.join(timeout=self.STOP_WAIT_SECONDS)
+
+    def _run(self) -> None:
+        channel = None
+        failed = False
+        try:
+            from momentum_hunter.science_custody_commit import CustodyCommitPending
+
+            channel = _open_science_custody_writer(self._policy)
+            self._set_status(state="READY")
+            while not self._stop.is_set():
+                self._set_status(state="POLLING", inFlight=True)
+                try:
+                    result = channel.poll_once()
+                except (CustodyCommitPending, OSError) as exc:
+                    self._increment("errorCount")
+                    self._set_status(state="DEGRADED", lastError=type(exc).__name__)
+                except Exception:
+                    # Malformed/conflicting bytes and authority/integrity errors
+                    # fail this channel closed until explicit restart/readmission.
+                    # Never spin through a failed custody contract.
+                    raise
+                else:
+                    if result is not None:
+                        self._increment("receiptObservationCount")
+                    self._set_status(state="READY")
+                finally:
+                    self._increment("pollCount")
+                    self._set_status(inFlight=False)
+                self._stop.wait(self.POLL_INTERVAL_SECONDS)
+        except Exception as exc:
+            failed = True
+            self._increment("errorCount")
+            self._set_status(state="FAILED", lastError=type(exc).__name__)
+        finally:
+            if channel is not None:
+                try:
+                    channel.close()
+                except Exception as exc:
+                    failed = True
+                    self._increment("errorCount")
+                    self._set_status(state="CLOSE_FAILED", lastError=type(exc).__name__)
+            if not failed:
+                self._set_status(state="STOPPED", inFlight=False)
+
+
 class ProductionWriterServer:
     """Authenticated, single-owner writer process for the production root."""
 
-    def __init__(self, config: Mapping[str, Any]) -> None:
+    def __init__(
+        self, config: Mapping[str, Any], *,
+        science_custody_policy: ScienceCustodyPolicy | None = None,
+    ) -> None:
         self.config = config
         self.topology = _topology(config)
         self.root = Path(str(config["evidenceRoot"])) / self.topology.namespace
@@ -265,6 +383,20 @@ class ProductionWriterServer:
         self.session_key: bytes | None = None
         self.status_path = self.root / "status" / "writer-status.json"
         self._write_status("STARTING")
+        # Absence is fully dormant: do not inspect Science config, import its
+        # native backend, open roots, construct synchronization, or start a timer.
+        self._science_custody_worker = (
+            None if science_custody_policy is None
+            else _ScienceCustodyWorker(science_custody_policy)
+        )
+
+    @property
+    def science_custody_status(self) -> dict[str, object]:
+        """Separate operational status; never a durable commit acknowledgment."""
+
+        if self._science_custody_worker is None:
+            return {"state": "DISABLED", "threadAlive": False, "inFlight": False}
+        return self._science_custody_worker.snapshot()
 
     def _load_checkpoint(self) -> tuple[int, str]:
         generations = self.root / "index" / "generations"
@@ -299,8 +431,15 @@ class ProductionWriterServer:
         _atomic_replace(self.status_path, _canonical_bytes(payload))
 
     def close(self) -> None:
-        self._write_status("STOPPED")
-        self.storage.close()
+        worker = self._science_custody_worker
+        if worker is not None:
+            worker.request_stop()
+        try:
+            self._write_status("STOPPED")
+            self.storage.close()
+        finally:
+            if worker is not None:
+                worker.wait_stopped()
 
     def _handshake(self, frame: Mapping[str, Any]) -> dict[str, Any]:
         session_id = str(frame.get("sessionId", ""))
