@@ -1014,8 +1014,18 @@ class ContinuousRuntimeTests(unittest.TestCase):
             "paper",
         )
         self.assertFalse(
-            any(any(token in item.lower() for token in forbidden_imports) for item in imports)
+            any(any(token in item.lower() for token in forbidden_imports)
+                for item in imports if item != "momentum_hunter.native_paper_intake")
         )
+        disabled_imports = [node for node in ast.walk(tree) if isinstance(node, ast.ImportFrom)
+                            and node.module == "momentum_hunter.native_paper_intake"]
+        self.assertEqual([["DisabledPaperIntake"]], [[a.name for a in node.names] for node in disabled_imports])
+        intake_tree = ast.parse(Path("momentum_hunter/native_paper_intake.py").read_text(encoding="utf-8"))
+        intake_imports = [node.module or "" for node in ast.walk(intake_tree) if isinstance(node, ast.ImportFrom)]
+        self.assertNotIn("momentum_hunter.native_paper_execution", intake_imports)
+        self.assertNotIn("momentum_hunter.native_paper_broker", intake_imports)
+        self.assertFalse(any(token in item for item in intake_imports
+                             for token in ("socket", "requests", "schwab", "alpaca", "science")))
         lowered = source.lower()
         for token in (
             "submit_order",

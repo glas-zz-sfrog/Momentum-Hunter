@@ -1129,6 +1129,7 @@ class ContinuousOpportunityRuntime:
         lease_registry: LogicalRuntimeLeaseRegistry,
         checkpoint_store: RuntimeCheckpointStore,
         research_producer=None,
+        disabled_paper_intake=None,
     ) -> None:
         if not runtime_instance_id.strip():
             raise ContinuousRuntimeError("Runtime instance identity is required.")
@@ -1142,6 +1143,14 @@ class ContinuousOpportunityRuntime:
         self.writer = writer
         self.lease_registry = lease_registry
         self.checkpoint_store = checkpoint_store
+        if disabled_paper_intake is not None:
+            from momentum_hunter.native_paper_intake import DisabledPaperIntake
+            if (type(disabled_paper_intake) is not DisabledPaperIntake
+                    or disabled_paper_intake.binding["runtime_fingerprint"] != config.fingerprint):
+                raise ContinuousRuntimeError("Disabled Paper intake binding is invalid.")
+        self.disabled_paper_intake = disabled_paper_intake
+        self._disabled_paper_pending: dict[str, dict] = {}
+        self.disabled_paper_failure: str | None = None
         if research_producer is not None and research_producer.runtime_fingerprint != config.fingerprint:
             raise ContinuousRuntimeError("Research producer runtime identity is not the current runtime.")
         self.research_producer = research_producer
@@ -1424,6 +1433,7 @@ class ContinuousOpportunityRuntime:
             else discovery_cadence_seconds
         )
         tick_started = time.perf_counter()
+        self._flush_disabled_paper(now)
         if self._check_writer_liveness(now):
             self._checkpoint(now)
             return self.health(now)
@@ -1516,6 +1526,7 @@ class ContinuousOpportunityRuntime:
         lease_registry: LogicalRuntimeLeaseRegistry,
         checkpoint_store: RuntimeCheckpointStore,
         research_producer=None,
+        disabled_paper_intake=None,
     ) -> "ContinuousOpportunityRuntime":
         payload = checkpoint_store.load(config.runtime_identity)
         if payload.get("contract_version") != CONTRACT_VERSION:
@@ -1537,7 +1548,14 @@ class ContinuousOpportunityRuntime:
             lease_registry=lease_registry,
             checkpoint_store=checkpoint_store,
             research_producer=research_producer,
+            disabled_paper_intake=disabled_paper_intake,
         )
+        prior_paper = payload.get("disabled_paper")
+        if (prior_paper or {}).get("binding") != (disabled_paper_intake.binding if disabled_paper_intake else None):
+            raise RuntimeCheckpointError("Disabled Paper intake binding changed across restart.")
+        if prior_paper:
+            runtime._disabled_paper_pending = dict(prior_paper["pending"])
+            runtime.disabled_paper_failure = prior_paper["failure"]
         prior_producer = payload.get("research_producer")
         current_binding = research_producer.binding if research_producer is not None else None
         if (prior_producer or {}).get("binding") != current_binding:
@@ -2762,6 +2780,7 @@ class ContinuousOpportunityRuntime:
                 attempt_event=terminal_attempt,
             )
             return
+        self._record_disabled_paper(request, result, now)
         prior_cycle = self._terminal_cycle_ids.get(result.cycle_id)
         if prior_cycle is not None:
             if prior_cycle != result.fingerprint:
@@ -2872,6 +2891,43 @@ class ContinuousOpportunityRuntime:
             },
             now=now,
         )
+
+    def _record_disabled_paper(self, request: CompositionRequest, result: CompositionResult, now: datetime) -> None:
+        if self.disabled_paper_intake is None or self.disabled_paper_failure:
+            return
+        source = _fingerprint("disabled-paper-source", (request.request_id, result.cycle_id))
+        payload = {
+            "source_identity": source, "runtime_fingerprint": self.config.fingerprint,
+            "owner": "CONTINUOUS_ENGINE_COMPOSITION", "state": "DISABLED", "execution_authority": "NONE",
+            "request": asdict(request), "result": asdict(result),
+        }
+        previous = self._disabled_paper_pending.get(source)
+        if previous and _fingerprint("disabled-paper-payload", previous["payload"]) != _fingerprint("disabled-paper-payload", payload):
+            self.disabled_paper_failure = "DISABLED_INTAKE_SOURCE_CONFLICT"
+            return
+        if source not in self._disabled_paper_pending:
+            if len(self._disabled_paper_pending) >= self.config.processed_event_capacity:
+                self.disabled_paper_failure = "DISABLED_INTAKE_PENDING_CAPACITY"
+                return
+            self._disabled_paper_pending[source] = {"payload": payload, "attempts": 0}
+        # Include in-flight work and pending intent before the separate durable sink.
+        self._checkpoint(now)
+        self._flush_disabled_paper(now)
+
+    def _flush_disabled_paper(self, now: datetime) -> None:
+        if self.disabled_paper_intake is None or self.disabled_paper_failure:
+            return
+        for source, pending in tuple(self._disabled_paper_pending.items()):
+            try:
+                self.disabled_paper_intake.record(pending["payload"], now)
+            except Exception as exc:
+                pending["attempts"] += 1
+                pending["last_error"] = type(exc).__name__
+                if pending["attempts"] >= 3:
+                    self.disabled_paper_failure = "DISABLED_INTAKE_TERMINAL_FAILURE:" + type(exc).__name__
+                break
+            else:
+                del self._disabled_paper_pending[source]
 
     def _emit_intent(
         self,
@@ -3502,6 +3558,10 @@ class ContinuousOpportunityRuntime:
                                            "runtime_failure": self.research_publication_failure,
                                            "pending_intent": asdict(self._research_pending_intent)
                                            if self._research_pending_intent else None}
+        if self.disabled_paper_intake is not None:
+            payload["disabled_paper"] = {"binding": self.disabled_paper_intake.binding,
+                                         "pending": self._disabled_paper_pending,
+                                         "failure": self.disabled_paper_failure}
         path = self.checkpoint_store.save(self.config.runtime_identity, payload)
         self._counters["checkpoint_writes"] += 1
         return path
