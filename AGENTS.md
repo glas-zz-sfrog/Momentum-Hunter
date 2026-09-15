@@ -14,6 +14,14 @@ Apply `docs/argus-office/PRAGMATIC_GATE_AND_EVIDENCE_POLICY.md` to all agent wor
 - Astra and all specialists classify findings by tier and state impact, limitations, correction, permitted continuation, and blocked claims. A missing redundant copy does not invalidate proven primary custody unless that copy supplies required Tier-1 authority.
 - Paper entry retains every Tier-1 safety/authority gate; bounded Tier-2 and honestly labeled Tier-3 imperfections do not automatically block it. This policy grants no activation or execution authority and does not bypass existing executable gates.
 
+## Repeated Bounded Harness Repair
+Apply `docs/argus-office/HARNESS_REPAIR_AUTONOMY.md` under Steven's `ARGUS-GOVERNANCE-AMENDMENT-HARNESS-REPAIR-AUTONOMY-001`.
+- During an already-authorized task, repeatedly diagnose/repair/retest proven in-scope harness-only defects without asking Steven to reauthorize each cycle; there is no one-repair quota.
+- Preserve each failed receipt, establish concrete reproducible root cause, make the smallest machinery-only repair, rerun the directly affected gate first, then automatically resume parent qualification after PASS. Retain failed and repaired evidence for review.
+- All predicates must hold: no Product/runtime/trading/Science semantics implicated, no production mutation, no new privilege/authority, no weakened safety/correctness invariant, concrete reproducible cause, machinery-only scope, failed evidence preserved, existing task scope retained.
+- Do not rerun broad/full suites solely for a harness correction; still run every suite required by parent acceptance. Frozen candidates, declared paths, independent review and role/integration boundaries remain intact.
+- Stop the affected repair for product/semantic/architecture/canonical-contract change, production mutation, security relaxation, new privilege/authority, provider/broker/account contact, Paper/live authority, weakened acceptance or material scope expansion. Deterministic failure alone is not a reason to wait for Steven.
+
 ## Authority Model
 - Steven is CEO, product owner, final visual acceptance authority, and decision-maker for anomaly and consequence gates.
 - Routine nonvisual implementation, verification, Git integration, and backup are delegated under the standing policy below; do not ask Steven to rubber-stamp expected results.
@@ -98,6 +106,7 @@ Every agent report must include:
 - Manual QA, if applicable
 - Open questions
 - Recommendation
+- Harness repair fields: `HARNESS_DEFECTS_AUTONOMOUSLY_REPAIRED`, `FAILED_RECEIPTS_PRESERVED`, `AFFECTED_GATES_RERUN`, `PRODUCT_BYTES_CHANGED_BY_HARNESS_REPAIRS`, `PRODUCTION_CHANGED_BY_HARNESS_REPAIRS`, `SECURITY_AUTHORITY_EXPANDED`. Report zero/not applicable honestly; the last three must remain NO for bounded harness repair.
 
 ## Branch Policy
 Use task branches. Git Steward may fast-forward verified nonvisual work into local `master` and perform a non-force backup push under standing delegation when the worktree is clean, the branch is an ancestor-compatible fast-forward, protected-path review passes, and secret scanning is clean. Visual/UI work waits for Steven's manual acceptance.

@@ -100,6 +100,21 @@ immutable. Do not amend, rebase, rewrite, force-push, or append executable, test
 tool, or runtime bytes. A later executable change creates a new candidate and, when
 the task class requires it, a new package and second-eye review.
 
+## Bounded Qualification-Harness Repair
+
+Apply [the standing harness-repair amendment](../HARNESS_REPAIR_AUTONOMY.md)
+inside the existing task's declared scope. Proven machinery-only defects may
+be repaired repeatedly, with original failure retention, affected-gate-first
+retest and automatic parent continuation after PASS. This does not grant
+cross-lane product work, shared-environment or production mutation, new
+privilege, weaker acceptance, canonical-contract change or builder self-merge.
+
+Frozen-head and package rules above still apply. Preserve reviewed candidates
+and failed receipts; any required test/tool successor needs its own identity,
+freeze and applicable review within existing authority. Exact-byte integration
+cannot silently repair a source candidate or resolve an executable conflict.
+Record the amendment's six required final-report fields even for zero repairs.
+
 ## External-State Isolation
 
 Git isolation is necessary but insufficient. Every task receives unique evidence,

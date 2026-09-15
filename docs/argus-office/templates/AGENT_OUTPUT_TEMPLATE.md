@@ -29,6 +29,25 @@ Only Tier 1 automatically blocks consequential progression. Keep nonqualifying c
 ## Evidence For Changed Behavior Or Qualified Claims
 Separate verified facts, inferences, missing proof and checks not run. For capture timing, record TARGET_TIME, ACTUAL_TIME, DELTA, CAPTURE_CLASSIFICATION and the policy inputs; distinguish research value from scheduler qualification.
 
+## Harness Repair Record
+
+Use [the standing amendment](../HARNESS_REPAIR_AUTONOMY.md). List each defect,
+reproducible root cause, failed receipt, bounded repaired machinery identity,
+affected-gate rerun/result and automatic parent-resumption point. Preserve both
+failed and repaired evidence. For zero repairs, state zero/not applicable.
+
+```text
+HARNESS_DEFECTS_AUTONOMOUSLY_REPAIRED =
+FAILED_RECEIPTS_PRESERVED =
+AFFECTED_GATES_RERUN =
+PRODUCT_BYTES_CHANGED_BY_HARNESS_REPAIRS = NO
+PRODUCTION_CHANGED_BY_HARNESS_REPAIRS = NO
+SECURITY_AUTHORITY_EXPANDED = NO
+```
+
+The NO values are required boundaries, not pre-filled proof. Report an actual
+breach truthfully and stop the affected progression.
+
 ## Push/Merge Status
 
 ## Risks

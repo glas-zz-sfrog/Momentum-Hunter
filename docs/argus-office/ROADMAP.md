@@ -55,6 +55,57 @@ This section is `CURRENT AUTHORITY` and intentionally concise.
 
 ### Active Priority
 
+`ARGUS-GOVERNANCE-AMENDMENT-HARNESS-REPAIR-AUTONOMY-001` is an
+owner-adopted `STANDING_MH_DEVELOPMENT_RULE / GOVERNANCE_ONLY`.
+Apply [HARNESS_REPAIR_AUTONOMY.md](HARNESS_REPAIR_AUTONOMY.md) during
+already-authorized tasks: preserve failures, prove a machinery-only root cause,
+repair minimally, retest the affected gate first and resume automatically on
+PASS, including second and later defects. Required acceptance suites and all
+product, production, frozen-review, security and authority boundaries remain.
+This task does not perform a harness or product repair.
+
+At this task's admission on 2026-09-14, canonical local/master/origin/master
+and the direct remote were clean/synchronized at
+`2dd1eb40c5e5ad2ef1b5cffe37cc58f6bf2bfd9a`, tree
+`3560cb2b578e53c0b0da321dc0a8e7fa840f60cb`. Verified first-parent lineage
+since the historical Final009 governance snapshot is
+`86cf85f441555cf32c985790d7d51ffaca853a84` ->
+`cd79533ed24054a47f492f1f58e878f3c01b5df1` ->
+`2dd1eb40c5e5ad2ef1b5cffe37cc58f6bf2bfd9a`.
+Integration012 admitted the accepted Engine010/Science004 composite;
+Science006 then admitted the exact Science005 namespace-notification closure.
+Both are completed source integrations, not pending producer/recorder tasks.
+Their original acceptance and evidence identities remain unchanged.
+
+This incorporates Science006's preserved `ROADMAP-READMISSION.md` at
+`F:\ArgusQualification\Integration\ARGUS-SCIENCE-CUSTODY-NAMESPACE-NOTIFICATION-CANONICAL-INTEGRATION-006-20260912T135811Z`.
+Its final status SHA256 is
+`2290ce8ec61c498c9229da672f8305807eeff7088f05fe54d17845fb01610d6f`;
+its integration manifest SHA256 is
+`aaeebee723c326c9605ea5e43865f62589ffa5a8dc4b1de564fad6566c17d4b9`.
+This is source/lineage readmission, not a new installed-runtime health claim.
+Science custody notification source closure is complete. Excessive Science
+permissions, stale-generation readiness, shutdown ordering and installed-host
+seams remain open pending separately scoped Engine-host qualification.
+The retained Host013A draft and all failed receipts remain immutable.
+
+The governance-only publication record is in
+`F:\ArgusQualification\Governance\ARGUS-GOVERNANCE-AMENDMENT-HARNESS-REPAIR-AUTONOMY-001-20260915T034714Z`.
+`FINAL-REPORT.md` and `INTEGRATION-RECEIPT.json` record the actual accepted
+descendant, review, checks and non-force backup after publication. A branch-only
+copy is `IMPLEMENTED_PENDING_MERGE`; only proven serialized admission is
+`CANONICAL_INTEGRATED`. The governance descendant does not change the
+accepted executable/test/tool bytes or grant activation authority.
+
+Do not reopen Engine010 or Science004. Do not resume Engine-host implementation
+or Opening production repair in this governance task. Independent lanes retain
+their existing directives; next canonical admission still requires an exact
+accepted candidate, current-base compatibility and serialized integration.
+No service/scheduler, provider/account, Paper/live or production-runtime action
+is authorized by this amendment.
+
+### Final009 Snapshot (Historical Evidence)
+
 `ARGUS-CONTINUOUS-CAPTURE-FOUNDATION-FINAL-INTEGRATION-009` is
 `COMPLETE / CANONICAL_SOURCE_INTEGRATED / NO_PRODUCTION_ACTIVATION`.
 On 2026-09-11 the Integration Steward admitted exact source
@@ -889,34 +940,35 @@ separate arming remain Tier 1. No readiness or activation is declared here.
 
 ### 1. Active
 
-1. Final009 continuous foundation source is integrated and backed up at
-   `1a64017d52844523b6ff838e693f56cfae6e8fa7`; the Integration Steward is
-   closing only shared governance. Hold the accepted source stable and deliver
-   producer/recorder handoffs. No production deployment or activation follows.
-   Successors bind actual current canonical and the original qualified source,
-   exact relevant hashes and review provenance before scoped work.
+1. Apply the repeated bounded harness-repair amendment within each existing
+   authorized task. The Integration Steward owns this documentation-only
+   publication and holds accepted product bytes unchanged. Integration012 and
+   Science006 supersede the historical Final009 producer/recorder wait.
+   Re-read actual canonical and the publication receipt before a successor;
+   no product repair, installation, activation or production recovery is
+   commissioned by this governance update.
 
 ### 2. Ready / Next
 
-1. Engine continuous producer: READY_FOR_SEPARATE_TASK. Register a bounded task
-   from accepted canonical; bind F1/Writer005/Engine007/Engine008/V2 dependencies,
-   implement exact one-way V2 wiring with original source identifiers/clocks and
-   seven families, then qualify/freeze/review. Opening is not a prerequisite.
-2. Science continuous recorder: READY_FOR_SEPARATE_TASK. Preserve Recorder001's
-   exact six-file predecessor and original base. Reconcile an isolated successor
-   using accepted Prep002 and actual final shared-storage dependencies; prove
-   original V2 bytes, independent receipt/eligibility chronology, atomic cursor,
-   restart and matched-shape scaling. Independently running optimization may be
-   consumed only after its own identity, scope and acceptance gates; no silent
-   import/rebase. Sustainable throughput is not yet qualified by foundation.
-3. End-to-end Continuous rehearsal: plan ready, execution BLOCKED until producer
-   and recorder source are accepted together. Separately authorize a synthetic
-   prospective producer -> writer -> V2 -> Science run with conservation,
-   clocks, durability, faults, restart and idempotency under declared bounds.
-4. Continuous operation follows accepted rehearsal and separate activation
-   authority: immutable installed closure/environment, singleton service/recorder
-   topology, guardian, quiescence/recovery and preserved epoch. No late Sep10
-   Opening replay, implicit Automation restart or duplicate runtime.
+1. Engine010 producer and Science004 recorder: accepted and integrated through
+   Integration012, not tasks to reopen. Retain exact component and combined
+   rehearsal identities. Ownership remains six Engine producer families,
+   START/FINAL session manifests, zero Engine outcome publications and
+   Science-owned later outcomes: six Engine plus one Science historical family.
+2. Science005 custody namespace/notification closure: integrated through
+   Science006 at `2dd1eb40c5e5ad2ef1b5cffe37cc58f6bf2bfd9a`.
+   Original review/full-suite evidence is preserved; this governance update
+   neither reruns nor relabels it.
+3. Next host boundary: the separately scoped Engine Host013A successor must
+   resolve installed-host seams, excessive Science permissions, stale-generation
+   readiness and shutdown ordering. Preserve the rejected/unfinished nine-file
+   Host013A draft; reconcile only under its explicit successor directive and
+   current ancestry/dependency proof. No implementation is started here.
+4. Installed-runtime qualification, installation and Continuous operation
+   remain gated on accepted host closure and their separate authorization:
+   immutable installed closure/environment, singleton topology, guardian,
+   quiescence/recovery and preserved epoch. No late historical Opening replay,
+   implicit Automation restart, duplicate runtime or production activation.
 5. Native Paper execution/safety follows that progression. Accepted Science R4
    Repair003A at `8afc3a3bf35136840728e136352db4f017f57c1a` is an offline
    oracle/Engine handoff only. Native implementation, real source/account/mode

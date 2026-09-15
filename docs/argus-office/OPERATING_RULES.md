@@ -45,6 +45,24 @@ Required evidence includes commands run, test results, files changed, screenshot
 
 Match proof to the claim. Required implementation tests and authority proofs still pass before acceptance; unrelated historical UNKNOWN, research timing limits or optional-copy loss are separately labeled under the three-tier policy. Governance-only text changes require scope/link/content review, concrete policy cases and Git/hash evidence, not an application full-suite run that would prove no changed application behavior. This does not waive full-suite validation where a product task requires it.
 
+### Repeated Harness Repair And Decisive Failure
+
+Apply [HARNESS_REPAIR_AUTONOMY.md](HARNESS_REPAIR_AUTONOMY.md). For proven
+in-scope qualification/test/instrumentation/helper defects, preserve the failed
+receipt, establish the exact reproducible cause, repair minimally and rerun only
+the affected gate first. Automatically resume parent qualification after PASS.
+Repeat for later harness defects without a one-repair quota or routine owner
+reauthorization. Do not rerun full suites solely for the repair; required later
+acceptance suites still run.
+
+Stop irrelevant downstream work during harness diagnosis. A real product,
+security or architecture blocker stops downstream work that cannot change the
+disposition. Product/Science/trading semantics, production mutation, security
+relaxation, new privilege/authority, provider/account contact, Paper/live,
+acceptance weakening, canonical-contract change or material scope expansion
+require fresh authorization. Keep failed/repaired evidence, declared ownership
+and frozen-review boundaries; include the six harness fields in final reports.
+
 ## Review
 Use `TIER_1_MATERIAL`, `TIER_2_OPERATIONAL`, or `TIER_3_EVIDENTIARY` for each finding. State impact, limitations, recommended correction, permitted bounded continuation and blocked claims. Only Tier 1 automatically blocks consequential progression. A nonqualifying research or scheduler claim stays nonqualifying while safe work continues. Independent reviewers keep frozen candidates unchanged and never authorize activation by issuing an advisory ACCEPT.
 Specialists produce role-specific artifacts and may include recommendations inside those artifacts. QA may write tests only when explicitly assigned. Release Scribe updates logs, reports, and checklists but does not approve merges.

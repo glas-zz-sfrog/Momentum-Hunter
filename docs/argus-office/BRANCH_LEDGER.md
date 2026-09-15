@@ -2,6 +2,30 @@
 
 The Roadmap is the current-status authority. This ledger records branch evidence and classification only.
 
+## ARGUS-GOVERNANCE-AMENDMENT-HARNESS-REPAIR-AUTONOMY-001 - 2026-09-14
+
+Owner-authorized standing governance rule; nine documentation paths only.
+Task branch:
+`codex/ARGUS-GOVERNANCE-AMENDMENT-HARNESS-REPAIR-AUTONOMY-001`.
+Immutable base `2dd1eb40c5e5ad2ef1b5cffe37cc58f6bf2bfd9a`, tree
+`3560cb2b578e53c0b0da321dc0a8e7fa840f60cb`, was clean and matched
+local master, origin/master and direct remote at admission. Isolated worktree:
+`C:\Users\steve\AppData\Local\MomentumHunter\worktrees\INTEGRATION-HARNESS-REPAIR-AUTONOMY-001`.
+
+This separately authorized governance update incorporates the completed
+Integration012 -> Science006 readmission; the historical Final009 queue must
+not reopen accepted producer/recorder work. It does not modify or re-review
+their frozen product candidates. No harness repair is performed by this task.
+
+Actual frozen tree, scope/link/policy-case and secret/protected checks,
+independent Astra disposition, accepted commit and strict-fast-forward/non-force
+backup are recorded in `INTEGRATION-RECEIPT.json` and `FINAL-REPORT.md` at
+`F:\ArgusQualification\Governance\ARGUS-GOVERNANCE-AMENDMENT-HARNESS-REPAIR-AUTONOMY-001-20260915T034714Z`.
+Publication classification is `IMPLEMENTED_PENDING_MERGE` on a task branch
+and `CANONICAL_INTEGRATED` only after proven admission. Original base/evidence
+identities are retained. No application/full suite is claimed for docs-only
+policy decisions; required future product acceptance suites remain mandatory.
+
 ## ARGUS-CONTINUOUS-CAPTURE-FOUNDATION-FINAL-INTEGRATION-009 - 2026-09-11
 
 Source classification: `COMPLETE / CANONICAL_SOURCE_INTEGRATED / NOT_ACTIVATED`.

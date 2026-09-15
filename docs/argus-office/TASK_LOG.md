@@ -707,3 +707,28 @@ Protected areas require exact task scope and Hard Chew proof. Interrupt Steven b
   files,23scheduler definitions,three service identities/PIDs, approved environment
   and Science/R4/GUI worktrees match; two naturally changing receipts are labeled.
   Sep10 remains MISSED with no late replay. Manual visual QA is not applicable.
+
+## 2026-09-14 - ARGUS-GOVERNANCE-AMENDMENT-HARNESS-REPAIR-AUTONOMY-001
+
+- Owner adopted repeated bounded qualification-harness repair as a standing MH
+  development rule. Preserve each failed receipt, prove reproducible machinery-
+  only cause, repair minimally, rerun the affected gate first and automatically
+  resume the parent after PASS, including later defects in the same task.
+- Scope: nine governance documents on an isolated Integration Steward branch
+  from accepted `2dd1eb40c5e5ad2ef1b5cffe37cc58f6bf2bfd9a`.
+  Product/test/tool bytes, production state, security authority, role ownership,
+  frozen candidates and required acceptance gates are not changed by the rule.
+- Incorporated the proven Integration012 and Science006 source readmission
+  without rewriting their original reports. Accepted producer/recorder tasks
+  must not be reopened. Installed host boundaries still require separately
+  scoped Engine qualification; no production or Paper/live readiness is added.
+- Exact candidate, independent review, applicable documentation checks and
+  publication status are retained in `FINAL-REPORT.md` and
+  `INTEGRATION-RECEIPT.json` under
+  `F:\ArgusQualification\Governance\ARGUS-GOVERNANCE-AMENDMENT-HARNESS-REPAIR-AUTONOMY-001-20260915T034714Z`.
+  Branch-only publication remains implemented-pending-merge until accepted
+  serialized fast-forward; only that receipt establishes completed backup.
+- This governance task performs zero harness repairs. Failed-receipt retention
+  and affected-gate reruns are not applicable; product bytes changed by harness
+  repairs NO, production changed by harness repairs NO, security authority
+  expanded NO. Manual visual QA is not applicable.

@@ -18,6 +18,18 @@ provider/account authority, or Paper/live/execution activation. Existing code
 checks remain enforced until a separately scoped implementation changes them.
 An inability to pass an existing executable gate is not permission to bypass it.
 
+## Bounded Harness Repair Amendment
+
+Steven's `ARGUS-GOVERNANCE-AMENDMENT-HARNESS-REPAIR-AUTONOMY-001`
+adds [repeated bounded harness-repair autonomy](HARNESS_REPAIR_AUTONOMY.md)
+within already-authorized tasks. Preserve each failure, prove the machinery-only
+cause, repair minimally, rerun the affected gate first and automatically resume
+on PASS. There is no one-repair quota. Deterministic failure alone does not
+require owner intervention. Required acceptance suites, frozen review and all
+Tier-1 authority boundaries remain; a harness label cannot excuse a product
+failure or weaken a gate. Apply the amendment's full predicates, stops and
+reporting fields alongside this classification.
+
 ## Three Tiers
 
 | Tier | Classification | Default disposition |
