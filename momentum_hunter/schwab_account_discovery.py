@@ -6,9 +6,10 @@ import argparse
 import json
 import sys
 from dataclasses import dataclass
-from typing import Mapping, Sequence
+from typing import TYPE_CHECKING, Mapping, Sequence
 
-import requests
+if TYPE_CHECKING:
+    import requests
 
 from momentum_hunter.schwab_onboarding import (
     SchwabOAuthError,
@@ -82,6 +83,8 @@ class SchwabAccountNumbersTransport:
         session: requests.Session | None = None,
         timeout: tuple[float, float] = HTTP_TIMEOUT,
     ) -> None:
+        import requests
+
         self.session = session or requests.Session()
         if session is None:
             self.session.trust_env = False
@@ -92,6 +95,8 @@ class SchwabAccountNumbersTransport:
             raise SchwabAccountDiscoveryError(
                 "Schwab account discovery requires an active OAuth access token."
             )
+        import requests
+
         try:
             response = self.session.get(
                 SCHWAB_ACCOUNT_NUMBERS_URL,

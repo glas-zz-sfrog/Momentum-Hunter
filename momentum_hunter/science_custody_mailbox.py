@@ -224,6 +224,12 @@ class ScienceCustodyMailboxClient:
                 or current[1].file_identity != pending.request_file_identity):
             raise CustodyCommitConflict("Pending request was replaced or reused; old completion cannot acknowledge it.")
 
+    def read_confirmed(self, root, relative):
+        return self._reader.read_confirmed(root, relative)
+
+    def inspect_existing(self, root, relative):
+        return self._reader.inspect_existing(root, relative)
+
     def reconcile(self, pending: CustodyPendingRequest) -> CustodyCommitResult | None:
         """Verify a direct durable receipt; this is not scientific admission."""
         with self.backend.transaction():

@@ -11,10 +11,11 @@ import time
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from typing import Callable, Mapping, Protocol, Sequence
+from typing import TYPE_CHECKING, Callable, Mapping, Protocol, Sequence
 from urllib.parse import urlparse
 
-import requests
+if TYPE_CHECKING:
+    import requests
 
 from momentum_hunter import schwab_candle_contract as candle_contract_module
 from momentum_hunter.schwab_account_discovery import (
@@ -755,6 +756,8 @@ class SchwabCandleHttpTransport:
         session: requests.Session | None = None,
         timeout: tuple[float, float] = HTTP_TIMEOUT,
     ) -> None:
+        import requests
+
         self.session = session or requests.Session()
         if session is None:
             self.session.trust_env = False
@@ -820,6 +823,8 @@ class SchwabCandleHttpTransport:
             raise SchwabCandleObserverNetworkError(
                 "Schwab candle observation refused an unrecognized HTTP endpoint."
             )
+        import requests
+
         try:
             response = self.session.get(
                 url,

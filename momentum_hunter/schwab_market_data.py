@@ -10,9 +10,10 @@ import uuid
 from dataclasses import dataclass
 from datetime import datetime, time, timezone
 from pathlib import Path
-from typing import Callable, Mapping, Sequence
+from typing import TYPE_CHECKING, Callable, Mapping, Sequence
 
-import requests
+if TYPE_CHECKING:
+    import requests
 
 from momentum_hunter.schwab_account_discovery import (
     SchwabAccountDiscoveryError,
@@ -438,6 +439,8 @@ class SchwabMarketDataTransport:
         timeout: tuple[float, float] = HTTP_TIMEOUT,
         clock: Callable[[], datetime] | None = None,
     ) -> None:
+        import requests
+
         self.session = session or requests.Session()
         if session is None:
             self.session.trust_env = False
@@ -475,6 +478,8 @@ class SchwabMarketDataTransport:
                     source_identity=SCHWAB_HTTPS_CLOCK_SOURCE,
                 ),
             )
+        import requests
+
         request_started_at = self.clock()
         try:
             response = self.session.get(

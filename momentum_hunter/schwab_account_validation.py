@@ -7,10 +7,11 @@ import getpass
 import json
 import sys
 from dataclasses import dataclass
-from typing import Mapping
+from typing import TYPE_CHECKING, Mapping
 from urllib.parse import quote
 
-import requests
+if TYPE_CHECKING:
+    import requests
 
 from momentum_hunter.schwab_account_discovery import (
     HTTP_TIMEOUT,
@@ -97,6 +98,8 @@ class SchwabAccountDetailsTransport:
         session: requests.Session | None = None,
         timeout: tuple[float, float] = HTTP_TIMEOUT,
     ) -> None:
+        import requests
+
         self.session = session or requests.Session()
         if session is None:
             self.session.trust_env = False
@@ -115,6 +118,8 @@ class SchwabAccountDetailsTransport:
         account_url = (
             f"{SCHWAB_ACCOUNT_DETAILS_BASE_URL}/{quote(normalized_hash, safe='')}"
         )
+        import requests
+
         try:
             response = self.session.get(
                 account_url,

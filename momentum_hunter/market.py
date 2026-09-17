@@ -3,8 +3,6 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 
-import requests
-
 from momentum_hunter.models import MarketRegime
 
 
@@ -59,6 +57,8 @@ def detect_market_regime(symbol: str = "SPY") -> MarketRegimeSnapshot:
 
 
 def fetch_daily_closes(symbol: str) -> list[float]:
+    import requests
+
     period1 = int((datetime.now() - timedelta(days=420)).timestamp())
     period2 = int(datetime.now().timestamp())
     url = (

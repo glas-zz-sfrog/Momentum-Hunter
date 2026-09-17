@@ -450,7 +450,8 @@ class StrategyScienceSourceReaderV2:
             match = CURSOR_FILE.fullmatch(path.name)
             if match is None or not path.is_file() or path.is_symlink():
                 raise SourceReaderCursorError("Science cursor namespace contains an unknown object.")
-            raw = path.read_bytes()
+            raw = (self._cursor_storage.read_committed(PurePath(path.name))
+                   if self._cursor_storage is not None else path.read_bytes())
             if sha256_hex(raw) != match.group("sha256"):
                 raise SourceReaderCursorError("Reader cursor filename hash does not verify.")
             try:

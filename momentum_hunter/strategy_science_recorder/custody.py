@@ -465,9 +465,15 @@ class StrategyScienceRecorder:
 
     def _read_raw(self, path: Path) -> bytes:
         relative = path.relative_to(self._storage.root)
+        confirmed = (self._storage.read_committed(relative)
+                     if self._custody_storage_set is not None else None)
         if self._views is not None and self._views.depth and relative.parts[0] == 'sessions':
-            return self._views.reads.read(path)
-        return path.read_bytes()
+            raw = self._views.reads.read(path)
+        else:
+            raw = path.read_bytes()
+        if confirmed is not None and raw != confirmed:
+            raise RecorderRecoveryError('Recovered raw differs from confirmed custody.')
+        return raw
 
     def _atomic_create(self, relative: PurePath, raw: bytes) -> bool:
         created = self._storage.atomic_create(relative, raw)
@@ -606,7 +612,7 @@ class StrategyScienceRecorder:
                     f"{_source_event_key(str(checkpoint['source_event_id']))}.source.json"
                 )
                 parsed = parse_export_envelope(
-                    (self._storage.root / Path(source_path)).read_bytes()
+                    self._read_raw(self._storage.root / Path(source_path))
                 )
                 counts[parsed.event_type] += 1
             heads.append(

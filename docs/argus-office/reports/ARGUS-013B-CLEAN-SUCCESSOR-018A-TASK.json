@@ -1,0 +1,18 @@
+{
+  "LANE": "OPENING_ENGINE",
+  "TASK_ID": "ARGUS-013B-CLEAN-SUCCESSOR-018A",
+  "BASE_CANONICAL_SHA": "8fe5e9b6a686678c7eed7d462a7ef24966449dda",
+  "BRANCH": "codex/ARGUS-013B-CLEAN-SUCCESSOR-018A",
+  "WORKTREE": "C:\\Users\\steve\\AppData\\Local\\MomentumHunter\\worktrees\\ARGUS-013B-CLEAN-SUCCESSOR-018A",
+  "WORKTREE_EXCEPTION": "Explicit new-lineage directive; persistent Engine worktree occupied and left untouched.",
+  "OWNED_PATHS": ["matrix-selected momentum_hunter host/custody/import-boundary files", "src/MomentumHunter.ContinuousServiceHost", "corresponding tests and tests-dotnet probes", "task-specific tools and reports"],
+  "PROTECTED_PATHS": ["canonical checkout", "prior branches and evidence", "production", "strategy/scoring/readiness decisions", "broker/account/order semantics", "GUI", "Science scientific semantics", "shared governance"],
+  "ALLOWED_CAPABILITIES": ["branch-only successor implementation", "offline tests", "one independent review after suites", "new isolated fixture after review", "synthetic diagnostic tests", "validator-only admission"],
+  "PROHIBITED_CAPABILITIES": ["UAC", "service/scheduler mutation", "physical Runtime/SCM execution", "provider/broker contact", "Paper/live", "activation", "canonical merge/push", "old fixture resurrection"],
+  "EVIDENCE_ROOT": "F:\\ArgusQualification\\Engine\\ARGUS-013B-CLEAN-SUCCESSOR-018A-20260917",
+  "TEMP_RUNTIME_ROOT": "F:\\ArgusQualification\\Engine\\ARGUS-013B-CLEAN-SUCCESSOR-018A-20260917\\fresh-fixture",
+  "PACKAGE_ROOT": "C:\\Users\\steve\\OneDrive\\Documents\\ArgusReviewBundles\\LANE-OPENING-ENGINE\\packages\\ARGUS-013B-CLEAN-SUCCESSOR-018A",
+  "PACKAGE_GATE": "Frozen source/test/evidence inventory; no physical or production claim",
+  "SECOND_EYE_GATE": "One independent frozen-candidate review after focused and full suites PASS",
+  "MERGE_GATE": "NOT_AUTHORIZED"
+}

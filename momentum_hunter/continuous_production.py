@@ -79,6 +79,16 @@ from momentum_hunter.continuous_evidence_writer import (
     build_production_continuous_writer_topology,
 )
 from momentum_hunter.scheduling import is_market_open_day, is_nyse_early_close
+from momentum_hunter.continuous_host_contract import (
+    OFFLINE, input_mode, validate_host, install_plan, OfflineNetworkGuard,
+    scrub_provider_environment, science_custody_policy,
+)
+from momentum_hunter.continuous_host_generation import (
+    HostGeneration, dependencies_drained, read_record,
+)
+from momentum_hunter.continuous_host_lifecycle import (
+    stdin_stop_event, retained_inputs, run_science, upstream_generations,
+)
 
 if TYPE_CHECKING:
     from momentum_hunter.windows_science_custody import ScienceCustodyPolicy
@@ -174,6 +184,7 @@ def _read_config(path: Path) -> dict[str, Any]:
     expected_configuration = _runtime_config(value).fingerprint
     if value.get("configurationFingerprint") != expected_configuration:
         raise ProductionDeploymentError("Deployment configuration identity is invalid.")
+    validate_host(value, path)
     return value
 
 
@@ -365,8 +376,14 @@ class ProductionWriterServer:
     def __init__(
         self, config: Mapping[str, Any], *,
         science_custody_policy: ScienceCustodyPolicy | None = None,
+        native_writer_admission=None,
     ) -> None:
         self.config = config
+        self._native_writer_admission = native_writer_admission
+        if science_custody_policy is not None and science_custody_policy.actor_profile is not None:
+            if native_writer_admission is None:
+                raise ProductionDeploymentError("Bounded Writer admission required before initialization.")
+            native_writer_admission.recheck()
         self.topology = _topology(config)
         self.root = Path(str(config["evidenceRoot"])) / self.topology.namespace
         self.root.mkdir(parents=True, exist_ok=True)
@@ -634,7 +651,7 @@ class ProductionWriterServer:
         self._write_status("READY", lastAcceptedSequence=envelope.sequence)
         return ack
 
-    def serve_forever(self, host: str, port: int) -> None:
+    def serve_forever(self, host: str, port: int, stop=None, generation=None) -> bool:
         server = self
 
         class Handler(socketserver.StreamRequestHandler):
@@ -646,6 +663,8 @@ class ProductionWriterServer:
                     if not isinstance(frame, dict):
                         raise ProductionDeploymentError("Writer frame is not an object.")
                     try:
+                        if server._native_writer_admission is not None:
+                            server._native_writer_admission.recheck()
                         if frame.get("frameType") == "HELLO":
                             response = server._handshake(frame)
                         elif frame.get("frameType") == "WRITE":
@@ -675,9 +694,31 @@ class ProductionWriterServer:
             listener.allow_reuse_address = False
             self._write_status("LISTENING", port=port)
             try:
-                listener.serve_forever(poll_interval=0.5)
+                if stop is None:
+                    listener.serve_forever(poll_interval=0.5)
+                else:
+                    listener.timeout = 0.2
+                    deadline = None
+                    while True:
+                        if self._native_writer_admission is not None:
+                            self._native_writer_admission.recheck()
+                        custody = self.science_custody_status
+                        custody_ready = custody["state"] in ("DISABLED", "READY", "POLLING")
+                        if generation is not None:
+                            generation.status("LISTENING" if custody_ready else "DEGRADED",
+                                              scienceCustody=custody)
+                        if stop.is_set():
+                            if deadline is None:
+                                bound = self.config["host"]["shutdownSeconds"] if generation and generation.enabled else 30
+                                deadline = time.monotonic() + bound
+                            if not generation or not generation.enabled or dependencies_drained(self.config, "writer"):
+                                return True
+                            if time.monotonic() >= deadline:
+                                return False
+                        listener.handle_request()
             finally:
                 self._write_status("STOPPING")
+        return True
 
 
 class ProductionRemoteWriter:
@@ -1062,14 +1103,31 @@ def _write_runtime_status(path: Path, health: RuntimeHealth | None, *, state: st
     _atomic_replace(path, _canonical_bytes(payload))
 
 
-def run_writer(config_path: Path) -> int:
+def run_writer(config_path: Path, stop=None, host=None) -> int:
     config = _read_config(config_path)
-    server = ProductionWriterServer(config)
+    policy = science_custody_policy(config)
+    from momentum_hunter.windows_writer_profile import NativeWriterAdmission
+    admission = None if policy is None else NativeWriterAdmission(config, policy)
+    server = None
+    complete = False
     try:
-        server.serve_forever(str(config["ipcHost"]), int(config["ipcPort"]))
+        server = ProductionWriterServer(config, science_custody_policy=policy, native_writer_admission=admission)
+        complete = server.serve_forever(str(config["ipcHost"]), int(config["ipcPort"]), stop, host)
     finally:
-        server.close()
-    return 0
+        try:
+            if server is not None:
+                server.close()
+        finally:
+            if admission is not None:
+                admission.close()
+    custody = server.science_custody_status
+    custody_closed = custody["state"] in ("DISABLED", "STOPPED") and not custody["threadAlive"]
+    complete = bool(complete and custody_closed)
+    if host:
+        host.status("STOPPED" if complete else "INCOMPLETE", drainComplete=complete,
+                    cleanupComplete=custody_closed, pendingWork=0 if complete else "UNKNOWN",
+                    dependencies={}, scienceCustody=custody)
+    return 0 if complete else 2
 
 
 def build_research_fact_producer(config: Mapping[str, Any], now: datetime):
@@ -1097,24 +1155,40 @@ def build_research_fact_producer(config: Mapping[str, Any], now: datetime):
     ).initialize(now)
 
 
-def run_runtime(config_path: Path) -> int:
+def run_runtime(config_path: Path, stop=None, host=None) -> int:
     config = _read_config(config_path)
     with ExitStack() as resources:
-        return _run_runtime(config, resources)
+        result = _run_runtime(config, resources, stop, host)
+    if host and host.enabled:
+        status = read_record(Path(config["runtimeStateRoot"]) / "runtime-status.json")
+        complete = result == 0 and status.get("state") == "STOPPED" and status.get("pendingWork") == 0 and not status.get("publicationFailure")
+        host.status("STOPPED" if complete else "INCOMPLETE", cleanupComplete=True, drainComplete=complete,
+            pendingWork=status.get("pendingWork", "UNKNOWN"), publicationFailure=status.get("publicationFailure"),
+            dependencies=upstream_generations(config, "runtime"))
+        return 0 if complete else 2
+    return result
 
 
-def _run_runtime(config: Mapping[str, Any], resources: ExitStack) -> int:
+def _run_runtime(config: Mapping[str, Any], resources: ExitStack, stop=None, host=None) -> int:
+    stop = stop or threading.Event()
     runtime_root = Path(str(config["runtimeStateRoot"]))
     runtime_root.mkdir(parents=True, exist_ok=True)
     status_path = runtime_root / "runtime-status.json"
+    checkpoints = RuntimeCheckpointStore(runtime_root / "checkpoint", allow_persistent=True)
+    checkpoint_path = checkpoints.path_for(str(config["runtimeIdentity"]))
+    checkpoint_payload = checkpoints.load(str(config["runtimeIdentity"])) if checkpoint_path.exists() else None
+    replay = retained_inputs(config, checkpoint_payload)
+    clock_now = replay.clock.now if replay else lambda: datetime.now().astimezone()
     state = QualificationState(
         root=runtime_root / "session",
-        launch_at=datetime.now().astimezone(),
+        launch_at=replay.launch_at if replay else clock_now(),
+        now_provider=clock_now if replay else None,
         allow_persistent=True,
         configuration_fingerprint=str(config["configurationFingerprint"]),
     )
-    discovery = LiveDiscoverySource(state)
-    market = LiveMarketDataSource(state, expected_account_ending=str(config["expectedAccountEnding"]))
+    discovery = LiveDiscoverySource(state, provider=replay.discovery_provider if replay else None)
+    market = LiveMarketDataSource(state, expected_account_ending="" if replay else str(config["expectedAccountEnding"]),
+                                 provider_boundary=replay.market_boundary if replay else None)
     composition = LiveCompositionSource(
         state,
         configuration_fingerprint=str(config["configurationFingerprint"]),
@@ -1125,8 +1199,6 @@ def _run_runtime(config: Mapping[str, Any], resources: ExitStack) -> int:
         market.backfill,
         natural_setup=composition.natural_setup,
     )
-    checkpoints = RuntimeCheckpointStore(runtime_root / "checkpoint", allow_persistent=True)
-    checkpoint_path = checkpoints.path_for(str(config["runtimeIdentity"]))
     if checkpoint_path.exists():
         checkpoint_payload = checkpoints.load(str(config["runtimeIdentity"]))
         runtime_instance_id = str(checkpoint_payload.get("runtime_instance_id", ""))
@@ -1137,7 +1209,7 @@ def _run_runtime(config: Mapping[str, Any], resources: ExitStack) -> int:
     remote_writer = ProductionRemoteWriter(config, source_identity=runtime_instance_id)
     leases = LogicalRuntimeLeaseRegistry()
     runtime_config = _runtime_config(config)
-    research_producer = build_research_fact_producer(config, datetime.now().astimezone())
+    research_producer = build_research_fact_producer(config, clock_now())
     if research_producer is not None:
         resources.callback(research_producer.close)
     runtime = ContinuousOpportunityRuntime(
@@ -1153,7 +1225,7 @@ def _run_runtime(config: Mapping[str, Any], resources: ExitStack) -> int:
         checkpoint_store=checkpoints,
         research_producer=research_producer,
     )
-    now = datetime.now().astimezone()
+    now = clock_now()
     if checkpoint_path.exists():
         runtime = ContinuousOpportunityRuntime.restore(
             config=runtime_config,
@@ -1182,12 +1254,17 @@ def _run_runtime(config: Mapping[str, Any], resources: ExitStack) -> int:
         resolvedDiscoveryCadenceSeconds=cadence,
         qualification=_qualification_metrics(state),
     )
-    last_restart = 0.0
+    dependencies = upstream_generations(config, "runtime") if host and host.enabled else {}
+    ticks = 0
     try:
-        while True:
+        while not stop.is_set():
             if runtime.process_state == "FAILED":
                 return 2
-            now = datetime.now().astimezone()
+            now = clock_now()
+            if host and host.enabled:
+                if dependencies != upstream_generations(config, "runtime"):
+                    raise ProductionDeploymentError("WRITER_GENERATION_CHANGED_RESTART_REQUIRED")
+                host.status("RUNNING", v2Ready=research_producer is not None, dependencies=dependencies)
             phase = _market_session_phase(now)
             cadence = _resolved_discovery_cadence(phase, config)
             if cadence is not None:
@@ -1230,14 +1307,29 @@ def _run_runtime(config: Mapping[str, Any], resources: ExitStack) -> int:
             if runtime.process_state == "FAILED":
                 return 2
             finalize_research_session(runtime, phase, now)
-            time.sleep(5)
+            ticks += 1
+            if replay:
+                if ticks >= config["offlineInput"]["maxTicks"]:
+                    break
+                replay.clock.sleep(config["offlineInput"]["tickSeconds"])
+                stop.wait(config["offlineInput"]["wallPauseSeconds"])
+            else:
+                stop.wait(5)
+        return 0
     except KeyboardInterrupt:
         return 0
     finally:
-        now = datetime.now().astimezone()
+        now = clock_now()
         try:
+            if host:
+                host.status("DRAINING", dependencies=dependencies)
             health = runtime.shutdown(now)
-            _write_runtime_status(status_path, health, state="STOPPED", config=config)
+            extra = {"qualification": _qualification_metrics(state), "pendingWork": runtime.pending_work,
+                     "publicationFailure": runtime.research_publication_failure}
+            if replay:
+                extra.update(inputMode=OFFLINE, observationClass="RETAINED_REPLAY_NOT_PROSPECTIVE",
+                             offlineTicks=ticks, retainedInput=replay.receipt())
+            _write_runtime_status(status_path, health, state="STOPPED", config=config, **extra)
         except Exception:
             _write_runtime_status(status_path, None, state="FAILED", config=config)
 
@@ -1259,9 +1351,13 @@ def finalize_research_session(runtime, phase, now):
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Momentum Hunter research-only continuous deployment host")
-    parser.add_argument("--role", choices=("writer", "runtime"))
+    parser.add_argument("--role", choices=("writer", "runtime", "science"))
     parser.add_argument("--config", type=Path, required=True)
     parser.add_argument("--print-config-fingerprint", action="store_true")
+    parser.add_argument("--print-install-plan", action="store_true")
+    parser.add_argument("--verify-writer-launch-profile", action="store_true")
+    parser.add_argument("--host-control-stdin", action="store_true")
+    parser.add_argument("--host-generation")
     args = parser.parse_args(argv)
     if args.print_config_fingerprint:
         config = json.loads(args.config.read_text(encoding="ascii"))
@@ -1269,9 +1365,43 @@ def main(argv: list[str] | None = None) -> int:
             raise SystemExit("Deployment configuration must be an object.")
         print(deployment_configuration_fingerprint(config))
         return 0
-    if args.role is None:
-        parser.error("--role is required unless --print-config-fingerprint is used")
-    return run_writer(args.config) if args.role == "writer" else run_runtime(args.config)
+    if args.role is None and not args.print_install_plan and not args.verify_writer_launch_profile:
+        parser.error("--role is required unless a read-only configuration command is used")
+    config = _read_config(args.config)
+    if args.print_install_plan:
+        print(json.dumps(install_plan(config, args.config, Path.cwd(), Path(sys.executable)), indent=2))
+        return 0
+    if args.verify_writer_launch_profile:
+        from momentum_hunter.windows_writer_profile import NativeWriterAdmission
+        if input_mode(config) != OFFLINE:
+            raise ProductionDeploymentError("Writer launch-profile qualification cannot activate production.")
+        admission = NativeWriterAdmission(config, science_custody_policy(config), require_generation=False,
+                                          self_authority_diagnostic=True)
+        try:
+            print(json.dumps({"status": "PASS", "profile": admission.profile.profile,
+                              "observation": admission.observation,
+                              "serviceDenials": admission.service_denials,
+                              "resourceCount": len(admission.guard.rows)}, ensure_ascii=True))
+        finally:
+            admission.close()
+        return 0
+    host = HostGeneration(config, args.role, args.host_generation)
+    stop = stdin_stop_event(args.host_control_stdin)
+    guard = None
+    if input_mode(config) == OFFLINE:
+        scrub_provider_environment()
+        guard = OfflineNetworkGuard(config["ipcHost"], config["ipcPort"], args.role)
+        guard.install()
+    try:
+        if args.role == "science":
+            return run_science(config, stop, host)
+        return run_writer(args.config, stop, host) if args.role == "writer" else run_runtime(args.config, stop, host)
+    finally:
+        if guard is not None:
+            _write_once(Path(config["logRoot"]) / args.role / f"network-{os.getpid()}.json", _canonical_bytes({
+                "hostFingerprint": config["hostFingerprint"], "inputMode": OFFLINE, "role": args.role,
+                "deniedProviderNetworkAttempts": guard.denied_attempts, "providerContact": False,
+                "scope": "PROCESS_AUDIT_GUARD; canonical adapters use only bound retained inputs and local writer IPC"}))
 
 
 if __name__ == "__main__":

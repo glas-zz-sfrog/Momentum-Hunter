@@ -663,8 +663,12 @@ class NativeBackendFlowTests(unittest.TestCase):
             value = backend.read_trusted(namespace, relative, maximum=mod.PROTOCOL_METADATA_BYTES)
             self.assertGreater(len(value.raw), backend.max_request_bytes)
             self.assertLessEqual(len(value.raw), mod.PROTOCOL_METADATA_BYTES)
+            expected = [backend.namespace_root(namespace) / relative]
+            if namespace == 'receipts':
+                from momentum_hunter.science_custody_commit import completion_path
+                expected.append(backend.namespace_root(namespace) / completion_path(request.identity.digest()))
             with patch.object(mod.os, "scandir", side_effect=lambda path: self.memory_scandir(native, path)):
-                self.assertEqual((backend.namespace_root(namespace) / relative,),
+                self.assertEqual(tuple(sorted(expected)),
                                  backend.iter_trusted(namespace, suffix=".json"))
 
     def test_lower_wire_cap_lost_receipt_recovery_preserves_original_final_and_claim(self):

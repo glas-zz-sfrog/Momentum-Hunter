@@ -58,6 +58,13 @@ class MemoryBackend:
             raise CustodyCommitError("Memory bounded read.")
         return result
 
+    def ensure_durable(self, namespace, relative, expected):
+        if self.objects.get((namespace, relative)) != expected:
+            raise CustodyCommitIntegrityError("Memory durability target changed.")
+
+    def publish_completion(self, relative, raw):
+        return self.create_trusted("receipts", relative, raw)
+
     def _read_transport(self, namespace, name, maximum):
         result = self.objects.get((namespace, name))
         if result is None:

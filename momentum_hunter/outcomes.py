@@ -4,8 +4,10 @@ import csv
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta
 from pathlib import Path
+from typing import TYPE_CHECKING
 
-import requests
+if TYPE_CHECKING:
+    import requests
 
 from momentum_hunter.scheduling import is_market_open_day, next_market_open_date
 from momentum_hunter.storage import ANALYSIS_CSV, DATA_DIR, ensure_app_dirs
@@ -277,6 +279,8 @@ def fetch_price_bars(
         f"https://query1.finance.yahoo.com/v8/finance/chart/{symbol}"
         f"?period1={period1}&period2={period2}&interval=1d&events=history"
     )
+    import requests
+
     try:
         response = session.get(url, timeout=timeout_seconds)
     except requests.RequestException:
@@ -317,6 +321,8 @@ def fetch_price_bars(
 
 
 def build_http_session() -> requests.Session:
+    import requests
+
     session = requests.Session()
     session.trust_env = False
     session.headers.update(

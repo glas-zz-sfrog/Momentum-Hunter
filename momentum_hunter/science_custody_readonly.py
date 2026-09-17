@@ -75,6 +75,7 @@ The caller owns this object's lifetime independently of recorder views.
         self._lock = threading.RLock()
         self._closed = False
         self._pending = self._result = None
+        self._reconfirming = False
         self.roots = self.backend.validate_readonly_roots()
         self.source_root_identity = self.backend.source_root_identity
         self.derived_root = self.backend.derived_root
@@ -150,6 +151,41 @@ The caller owns this object's lifetime independently of recorder views.
             self.client.acknowledge(self._pending, result)
             self._pending = self._result = None
 
+    def read_committed(self, alias, relative):
+        self._ensure_open()
+        relative = PurePath(relative).as_posix()
+        with self._lock:
+            try:
+                evidence = self.client.read_confirmed(alias, relative)
+            except CustodyCommitPending:
+                inspected = self.client.inspect_existing(alias, relative)
+                if inspected is None:
+                    raise WriterPhysicalStorageError('Unconfirmed object disappeared.')
+                original, visible = inspected
+                if self._pending is None:
+                    # Same logical commit, new bounded transport generation.
+                    # No scientific record is minted and no raw is adopted.
+                    self._pending = self.client.submit(final_root=alias, relative_path=relative,
+                                                       raw=visible.raw)
+                    self._reconfirming = True
+                elif self._pending.request.commit_binding() != original.commit_binding():
+                    raise CustodyCommitPending('Another publication remains pending; reconfirmation deferred.')
+                self._result = self._await(self._pending)
+                evidence = self.client.read_confirmed(alias, relative)
+            if evidence is None:
+                raise WriterPhysicalStorageError('Committed object is absent.')
+            if (self._reconfirming and self._pending.request.final_root == alias
+                    and self._pending.request.final_relative_path == relative):
+                # Only recovery of existing raw may retire its transport here.
+                # New publication retains the owner's registration callback.
+                result = self.client.reconcile(self._pending)
+                if result is None:
+                    raise CustodyCommitPending('Reconfirmation disappeared before cleanup.')
+                self.client.acknowledge(self._pending, result)
+                self._pending = self._result = None
+                self._reconfirming = False
+            return evidence.raw
+
     def close(self):
         if not self._closed:
             self._closed = True
@@ -198,12 +234,7 @@ class SealedScienceStorage:
 
     def read_committed(self, relative_path):
         with self.transaction():
-            evidence = self.storage_set.backend.read_trusted(
-                self.alias, PurePath(relative_path).as_posix(),
-                maximum=self.storage_set.backend.max_artifact_bytes)
-            if evidence is None:
-                raise WriterPhysicalStorageError('Committed object is absent.')
-            return evidence.raw
+            return self.storage_set.read_committed(self.alias, relative_path)
 
     def iter_files(self, relative_directory, *, suffix):
         with self.transaction():

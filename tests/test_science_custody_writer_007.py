@@ -10,6 +10,7 @@ import threading
 import time
 import unittest
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import patch
 
 from momentum_hunter import continuous_production as production
@@ -94,7 +95,7 @@ class ScienceCustodyWriter007Tests(unittest.TestCase):
             side_effect=factory, return_value=channel,
         ) as opener:
             server = production.ProductionWriterServer(
-                self.config, science_custody_policy=object()
+                self.config, science_custody_policy=SimpleNamespace(actor_profile=None)
             )
             self.servers.append(server)
             self._await(lambda: opener.called)

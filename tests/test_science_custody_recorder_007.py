@@ -44,7 +44,7 @@ class FilesystemProtocolFixture:
     max_request_bytes = 64 * 1024
     role = 'science'
 
-    def __init__(self, root):
+    def __init__(self, root, *, start_writer=True):
         self.base = root
         self.science = root / 'science'
         self.derived_root = root / 'derived'
@@ -62,7 +62,8 @@ class FilesystemProtocolFixture:
         self.finalizer = ScienceCustodyFinalizer(self)
         self.worker = ScienceCustodyMailboxWriter(self.finalizer, mailbox_backend=self)
         self.thread = threading.Thread(target=self._run, daemon=True)
-        self.thread.start()
+        if start_writer:
+            self.thread.start()
 
     def _run(self):
         while not self.stop.wait(0.001):
@@ -117,12 +118,39 @@ class FilesystemProtocolFixture:
         with self.lock:
             path = self.roots[namespace] / relative
             if path.exists():
-                return False, self.evidence(path, self.max_artifact_bytes)
+                existing = self.evidence(path, self.max_artifact_bytes)
+                if existing.raw != raw:
+                    raise CustodyCommitError('Structural write-once conflict.')
+                self.ensure_durable(namespace, relative, existing)
+                return False, existing
             path.parent.mkdir(parents=True, exist_ok=True)
             self._install(path, raw)
             self.trusted_creates += 1
             self.created_paths.append((namespace, relative))
-            return True, self.evidence(path, self.max_artifact_bytes)
+            evidence = self.evidence(path, self.max_artifact_bytes)
+            self.ensure_durable(namespace, relative, evidence)
+            return True, evidence
+
+    def ensure_durable(self, namespace, relative, expected):
+        path = self.roots[namespace] / relative
+        if self.evidence(path, self.max_artifact_bytes) != expected:
+            raise CustodyCommitError('Structural durability target changed.')
+        with path.open('r+b') as stream:
+            os.fsync(stream.fileno())
+        if self.evidence(path, self.max_artifact_bytes) != expected:
+            raise CustodyCommitError('Structural durability target changed across flush.')
+
+    def publish_completion(self, relative, raw):
+        with self.lock:
+            path = self.roots['receipts'] / relative
+            if path.exists():
+                existing = self.evidence(path, self.max_request_bytes)
+                if existing.raw != raw:
+                    raise CustodyCommitError('Structural completion conflict.')
+                return False, existing
+            path.parent.mkdir(parents=True, exist_ok=True)
+            self._install(path, raw)
+            return True, self.evidence(path, self.max_request_bytes)
 
     def _install(self, path, raw):
         temporary = self.derived_root / (uuid.uuid4().hex + '.test-private')
@@ -171,7 +199,8 @@ class FilesystemProtocolFixture:
 
     def close(self):
         self.stop.set()
-        self.thread.join(5)
+        if self.thread.ident is not None:
+            self.thread.join(5)
         if self.thread.is_alive():
             raise AssertionError('Structural test worker did not stop.')
 

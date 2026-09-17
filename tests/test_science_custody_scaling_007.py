@@ -37,18 +37,18 @@ from tests.test_strategy_science_recorder_eligibility_authority import export_en
 
 
 # Source-derived bounds, not throughput tolerances. A new final requires two
-# claim, two receipt and two raw lookups. Its staged/final/receipted bytes are
+# claim, four receipt/completion and two raw lookups. Its staged/final/receipted bytes are
 # each verified once. A receipt/checksum verification adds one dependency claim,
-# a three-read dependency lookup and one direct payload/manifest read: 5 extra
-# reads per verification, three verifications on a new commit (6 + 3*5 = 21).
-# A lookup verifies once (3 + 5 = 8). Dependencies are leaves: only the two edges
+# a four-read dependency lookup and one direct payload/manifest read: 6 extra
+# reads per verification, three verifications on a new commit (8 + 3*6 = 26).
+# A lookup verifies once (4 + 6 = 10). Dependencies are leaves: only the two edges
 # below are allowed, and no dependency may introduce another dependency.
 _DEPENDENCY_ROLE = {"SCIENTIFIC_RECEIPT": "PAYLOAD", "FINAL_CHECKSUM": "FINAL_MANIFEST"}
-_BASE_READ_BOUNDS = {"finalize": {"trusted_reads": 6, "claims_reads": 2, "receipts_reads": 2},
-                     "lookup": {"trusted_reads": 3, "claims_reads": 1, "receipts_reads": 1}}
+_BASE_READ_BOUNDS = {"finalize": {"trusted_reads": 8, "claims_reads": 2, "receipts_reads": 4},
+                     "lookup": {"trusted_reads": 4, "claims_reads": 1, "receipts_reads": 2}}
 _DEPENDENT_READ_BOUNDS = {
-    "finalize": {"trusted_reads": 21, "claims_reads": 8, "receipts_reads": 5, "custody_reads": 8},
-    "lookup": {"trusted_reads": 8, "claims_reads": 3, "receipts_reads": 2, "custody_reads": 3},
+    "finalize": {"trusted_reads": 26, "claims_reads": 8, "receipts_reads": 10, "custody_reads": 8},
+    "lookup": {"trusted_reads": 10, "claims_reads": 3, "receipts_reads": 4, "custody_reads": 3},
 }
 
 
@@ -72,7 +72,7 @@ class _MeasuredFilesystemFixture(FilesystemProtocolFixture):
         reader.lookup = self.measured("lookup", reader.lookup, by_role=True)
         original = reader._verify_final
 
-        def verify_dependency(request, final):
+        def verify_dependency(request, final, **kwargs):
             roles = getattr(self._measurement, "verifying_roles", ())
             role = request.identity.artifact_role
             if roles and (len(roles) != 1 or _DEPENDENCY_ROLE.get(roles[0]) != role):
@@ -84,7 +84,7 @@ class _MeasuredFilesystemFixture(FilesystemProtocolFixture):
                     self.verification_edges[roles[0] + "->" + role] += 1
             self._measurement.verifying_roles = (*roles, role)
             try:
-                return original(request, final)
+                return original(request, final, **kwargs)
             finally:
                 self._measurement.verifying_roles = roles
 
@@ -265,8 +265,10 @@ class SealedScienceScaling007Tests(unittest.TestCase):
         self.assertEqual(producer_inventories, recorder._support.counters["producer_full_inventories"])
         for sample in milestones.values():
             self.assert_role_work_bounds(sample)
-            self.assertEqual(21, sample["maximum"]["finalize:SCIENTIFIC_RECEIPT"]["trusted_reads"])
-            self.assertEqual(8, sample["maximum"]["lookup:SCIENTIFIC_RECEIPT"]["trusted_reads"])
+            self.assertEqual(_DEPENDENT_READ_BOUNDS['finalize']['trusted_reads'],
+                             sample["maximum"]["finalize:SCIENTIFIC_RECEIPT"]["trusted_reads"])
+            self.assertEqual(_DEPENDENT_READ_BOUNDS['lookup']['trusted_reads'],
+                             sample["maximum"]["lookup:SCIENTIFIC_RECEIPT"]["trusted_reads"])
             self.assertEqual(1, sample["verification_depths"]["SCIENTIFIC_RECEIPT"])
         self.assertEqual(result["coverage"]["canonical"], recorder.coverage()["canonical"])
         print("SCIENCE007_BOUNDED_WORK=" + json.dumps(milestones, sort_keys=True))
@@ -288,8 +290,10 @@ class SealedScienceScaling007Tests(unittest.TestCase):
                 storage.publication_verified("custody", path, raw)
         sample = self.backend.snapshot()
         self.assert_role_work_bounds(sample)
-        self.assertEqual(21, sample["maximum"]["finalize:FINAL_CHECKSUM"]["trusted_reads"])
-        self.assertEqual(8, sample["maximum"]["lookup:FINAL_CHECKSUM"]["trusted_reads"])
+        self.assertEqual(_DEPENDENT_READ_BOUNDS['finalize']['trusted_reads'],
+                         sample["maximum"]["finalize:FINAL_CHECKSUM"]["trusted_reads"])
+        self.assertEqual(_DEPENDENT_READ_BOUNDS['lookup']['trusted_reads'],
+                         sample["maximum"]["lookup:FINAL_CHECKSUM"]["trusted_reads"])
         self.assertEqual(1, sample["verification_depths"]["FINAL_CHECKSUM"])
         self.assertEqual(0, sample["verification_depths"]["FINAL_MANIFEST"])
         self.assertFalse(self.backend.errors, self.backend.errors)

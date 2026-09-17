@@ -13,11 +13,11 @@ import webbrowser
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from typing import Callable, Mapping
+from typing import TYPE_CHECKING, Callable, Mapping
 from urllib.parse import urlencode
 
-import requests
-from requests.auth import HTTPBasicAuth
+if TYPE_CHECKING:
+    import requests
 
 from momentum_hunter.schwab_loopback_certificate import (
     WindowsLoopbackCertificateManager,
@@ -269,6 +269,8 @@ class SchwabOAuthTransport:
         session: requests.Session | None = None,
         timeout: tuple[float, float] = HTTP_TIMEOUT,
     ) -> None:
+        import requests
+
         self.session = session or requests.Session()
         if session is None:
             self.session.trust_env = False
@@ -313,6 +315,9 @@ class SchwabOAuthTransport:
         credentials: SchwabApplicationCredentials,
         data: Mapping[str, str],
     ) -> dict[str, object]:
+        import requests
+        from requests.auth import HTTPBasicAuth
+
         try:
             response = self.session.post(
                 SCHWAB_TOKEN_URL,

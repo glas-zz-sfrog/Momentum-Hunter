@@ -269,10 +269,15 @@ class ContinuousScienceRecorder:
             if match is None or path.parent != self._storage.root / "ledger":
                 raise ContinuousRecorderError("Unknown authoritative ledger object.")
             assert self._ledger_reads is not None
+            confirmed = None
+            if self._custody_storage_set is not None and len(events) >= len(self._hashes):
+                confirmed = self._storage.read_committed(PurePath('ledger', path.name))
             try:
                 raw = self._ledger_reads.read(path)
             except VerifiedReadError as exc:
                 raise ContinuousRecorderError(str(exc)) from exc
+            if confirmed is not None and raw != confirmed:
+                raise ContinuousRecorderError('Recovered ledger differs from confirmed custody.')
             digest = sha256_hex(raw)
             index = len(events)
             if index < len(self._hashes):

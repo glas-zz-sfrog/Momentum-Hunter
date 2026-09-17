@@ -7,9 +7,10 @@ import sqlite3
 from dataclasses import asdict, dataclass, field
 from datetime import datetime, timedelta
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
-import requests
+if TYPE_CHECKING:
+    import requests
 
 from momentum_hunter.config import DATA_DIR, ensure_app_dirs
 from momentum_hunter.canonical_candle_evidence import canonical_minute_bar_symbols
@@ -236,6 +237,8 @@ def fetch_yahoo_daily_ohlc(
         f"https://query1.finance.yahoo.com/v8/finance/chart/{yahoo_symbol}"
         f"?period1={period1}&period2={period2}&interval=1d&events=history"
     )
+    import requests
+
     try:
         response = session.get(url, timeout=20)
     except requests.RequestException:

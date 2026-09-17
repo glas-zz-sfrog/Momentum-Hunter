@@ -21,6 +21,7 @@ from momentum_hunter.strategy_science_recorder.canonical import (
 
 
 PROTOCOL_VERSION = "SCIENCE_CUSTODY_COMMIT_007_V1"
+COMPLETION_VERSION = "SCIENCE_CUSTODY_DURABILITY_016E_V1"
 MAX_REQUEST_BYTES = 64 * 1024
 MAX_ARTIFACT_BYTES = 64 * 1024 * 1024
 _HASH = re.compile(r"[0-9a-f]{64}")
@@ -268,6 +269,8 @@ class CustodyCommitBackend(Protocol):
     def read_request(self, name: str, *, maximum: int) -> CustodyObjectEvidence: ...
     def read_trusted(self, namespace: str, relative: str, *, maximum: int) -> CustodyObjectEvidence | None: ...
     def create_trusted(self, namespace: str, relative: str, raw: bytes) -> tuple[bool, CustodyObjectEvidence]: ...
+    def ensure_durable(self, namespace: str, relative: str, expected: CustodyObjectEvidence) -> None: ...
+    def publish_completion(self, relative: str, raw: bytes) -> tuple[bool, CustodyObjectEvidence]: ...
     def close(self) -> None: ...
 
 
@@ -427,6 +430,10 @@ def receipt_path(identity_sha256: str) -> str:
     return f"{_hash(identity_sha256)[:2]}/{identity_sha256}.commit.json"
 
 
+def completion_path(identity_sha256: str) -> str:
+    return f"{_hash(identity_sha256)[:2]}/{identity_sha256}.complete.json"
+
+
 def _evidence(value: CustodyObjectEvidence, *, maximum: int) -> CustodyObjectEvidence:
     if (not isinstance(value, CustodyObjectEvidence) or not isinstance(value.raw, bytes)
             or len(value.raw) > maximum):
@@ -483,7 +490,7 @@ class ScienceCustodyFinalizer:
         _hash(claim["staging_descriptor_sha256"])
         return evidence, claim, original
 
-    def _verify_final(self, request, final):
+    def _verify_final(self, request, final, *, recover_dependencies=False):
         if len(final.raw) != request.byte_length or sha256(final.raw) != request.content_sha256:
             raise CustodyCommitIntegrityError("Final exact bytes differ from the durable binding.")
         actual = identity_for_artifact(source_root_identity=self.backend.source_root_identity,
@@ -492,9 +499,9 @@ class ScienceCustodyFinalizer:
         if actual != request.identity:
             raise CustodyCommitIntegrityError("Final logical identity differs from request.")
         if actual.artifact_role == "SCIENTIFIC_RECEIPT":
-            self._verify_scientific_receipt(request, final.raw)
+            self._verify_scientific_receipt(request, final.raw, recover=recover_dependencies)
         elif actual.artifact_role == "FINAL_CHECKSUM":
-            self._verify_final_checksum(request, final.raw)
+            self._verify_final_checksum(request, final.raw, recover=recover_dependencies)
 
     def _dependency_request(self, identity):
         claim = self._read("claims", claim_path(identity.digest()), MAX_REQUEST_BYTES)
@@ -505,11 +512,19 @@ class ScienceCustodyFinalizer:
         if not isinstance(original, dict):
             raise CustodyCommitIntegrityError("Referenced artifact claim has no exact request.")
         request = CustodyCommitRequest.from_bytes(canonical_protocol_bytes(original))
-        if request.identity != identity or request.final_root != "custody":
+        if request.identity != identity:
             raise CustodyCommitIntegrityError("Referenced artifact claim has another identity/root.")
         return request
 
-    def _verify_scientific_receipt(self, request, raw):
+    def _confirmed_dependency(self, original, expected_path, *, recover):
+        if original.final_root != "custody" or original.final_relative_path != expected_path:
+            raise CustodyCommitIntegrityError("Referenced artifact has another identity/root/path.")
+        if self.lookup(original) is None:
+            if not recover:
+                raise CustodyCommitPending("Referenced artifact durability is unconfirmed.")
+            self.finalize(original)
+
+    def _verify_scientific_receipt(self, request, raw, *, recover=False):
         parts = request.final_relative_path.split("/")
         parts[3] = "payloads"
         parts[-1] = parts[-1].removesuffix(".receipt.json") + ".payload.json"
@@ -524,16 +539,14 @@ class ScienceCustodyFinalizer:
                 or value.get("record_id") != payload_value.get("record_id")):
             raise CustodyCommitIntegrityError("Scientific receipt does not bind its exact payload/record.")
         original = self._dependency_request(identity)
-        if original.final_relative_path != payload_path or self.lookup(original) is None:
-            raise CustodyCommitIntegrityError("Scientific receipt payload is not the exact receipted final.")
+        self._confirmed_dependency(original, payload_path, recover=recover)
 
-    def _verify_final_checksum(self, request, raw):
+    def _verify_final_checksum(self, request, raw, *, recover=False):
         identity = CustodyCommitIdentity(self.backend.source_root_identity, "FINAL_MANIFEST",
                                          request.identity.scope, "FINAL_MANIFEST")
         original = self._dependency_request(identity)
         expected_manifest = request.final_relative_path.removesuffix(".sha256") + ".final.json"
-        if original.final_relative_path != expected_manifest or self.lookup(original) is None:
-            raise CustodyCommitIntegrityError("Checksum does not reference its exact committed manifest.")
+        self._confirmed_dependency(original, expected_manifest, recover=recover)
         manifest = self._read("custody", expected_manifest, self.backend.max_artifact_bytes)
         value = _scientific_json(manifest.raw)
         inventory = value.get("artifact_inventory")
@@ -565,9 +578,22 @@ class ScienceCustodyFinalizer:
         }
         return CustodyCommitReceipt(**core, receipt_identity=sha256(canonical_protocol_bytes(core)))
 
-    def _existing(self, request, claim_info):
+    def _completion_bytes(self, request, claim_info, final, receipt):
+        def binding(value):
+            return {"file_identity": value.file_identity, "sha256": sha256(value.raw),
+                    "owner_sid": value.owner_sid, "descriptor_sha256": value.descriptor_sha256}
+        return canonical_protocol_bytes({
+            "version": COMPLETION_VERSION, "policy_sha256": self.backend.policy_sha256,
+            "identity_sha256": request.identity.digest(), "claim": binding(claim_info[0]),
+            "final": binding(final), "receipt": binding(receipt),
+        })
+
+    def _existing(self, request, claim_info, *, recover_dependencies=False):
         evidence = self._read("receipts", receipt_path(request.identity.digest()), MAX_REQUEST_BYTES)
+        completion = self._read("receipts", completion_path(request.identity.digest()), MAX_REQUEST_BYTES)
         if evidence is None:
+            if completion is not None:
+                raise CustodyCommitIntegrityError("Completion exists without its exact receipt.")
             return None
         if claim_info is None:
             raise CustodyCommitIntegrityError("Receipt exists without its immutable claim.")
@@ -575,9 +601,13 @@ class ScienceCustodyFinalizer:
         final = self._read(request.final_root, request.final_relative_path, self.backend.max_artifact_bytes)
         if final is None:
             raise CustodyCommitIntegrityError("Receipted final is missing; recreation is prohibited.")
-        self._verify_final(request, final)
+        self._verify_final(request, final, recover_dependencies=recover_dependencies)
         if receipt.to_bytes() != self._receipt_for(request, claim_info, final).to_bytes():
             raise CustodyCommitIntegrityError("Receipt no longer binds the exact claim/final object.")
+        if completion is None:
+            return None
+        if completion.raw != self._completion_bytes(request, claim_info, final, evidence):
+            raise CustodyCommitIntegrityError("Completion no longer binds its exact durable objects.")
         return CustodyCommitResult(receipt, False, False)
 
     def lookup(self, request: CustodyCommitRequest) -> CustodyCommitResult | None:
@@ -585,11 +615,46 @@ class ScienceCustodyFinalizer:
         with self.backend.transaction():
             return self._existing(request, self._claim(request))
 
+    def inspect_existing(self, root: str, relative: str):
+        """Validate visible raw/claim for bounded reconfirmation, NOT success."""
+        if root not in _ROOTS:
+            raise CustodyCommitError("Unknown final root alias.")
+        relative = validate_relative_path(relative)
+        with self.backend.transaction():
+            final = self._read(root, relative, self.backend.max_artifact_bytes)
+            if final is None:
+                return None
+            identity = identity_for_artifact(source_root_identity=self.backend.source_root_identity,
+                final_root=root, relative_path=relative, raw=final.raw)
+            original = self._validate_request(self._dependency_request(identity))
+            if original.final_root != root or original.final_relative_path != relative:
+                raise CustodyCommitIntegrityError("Visible artifact differs from its claimed destination.")
+            self._claim(original)
+            if len(final.raw) != original.byte_length or sha256(final.raw) != original.content_sha256:
+                raise CustodyCommitIntegrityError("Visible artifact differs from its claimed exact bytes.")
+            return original, final
+
+    def read_confirmed(self, root: str, relative: str) -> CustodyObjectEvidence | None:
+        with self.backend.transaction():
+            inspected = self.inspect_existing(root, relative)
+            if inspected is None:
+                return None
+            original, final = inspected
+            result = self.lookup(original)
+            if result is None:
+                raise CustodyCommitPending("Visible artifact durability is unconfirmed.")
+            if (result.receipt.final_file_identity != final.file_identity
+                    or result.receipt.final_descriptor_sha256 != final.descriptor_sha256
+                    or result.receipt.final_owner_sid != final.owner_sid
+                    or result.receipt.final_sha256 != sha256(final.raw)):
+                raise CustodyCommitIntegrityError("Confirmed read object changed during verification.")
+            return final
+
     def finalize(self, request: CustodyCommitRequest) -> CustodyCommitResult:
         request = self._validate_request(request)
         with self.backend.transaction():
             claim_info = self._claim(request)
-            existing = self._existing(request, claim_info)
+            existing = self._existing(request, claim_info, recover_dependencies=True)
             if existing is not None:
                 return existing
             final = self._read(request.final_root, request.final_relative_path, self.backend.max_artifact_bytes)
@@ -597,6 +662,10 @@ class ScienceCustodyFinalizer:
                 raise CustodyCommitIntegrityError("Unclaimed final cannot be adopted.")
             recovered = final is not None
             created = False
+            if claim_info is not None:
+                self.backend.ensure_durable("claims", claim_path(request.identity.digest()), claim_info[0])
+            if final is not None:
+                self.backend.ensure_durable(request.final_root, request.final_relative_path, final)
             if final is None:
                 try:
                     staged = _evidence(self.backend.read_staged(request.staging_name,
@@ -606,7 +675,7 @@ class ScienceCustodyFinalizer:
                     raise CustodyCommitPending("Staging is absent; no committed outcome can be inferred.") from exc
                 if len(staged.raw) != request.byte_length or sha256(staged.raw) != request.staging_sha256:
                     raise CustodyCommitConflict("Pinned staging bytes differ from the request.")
-                self._verify_final(request, staged)
+                self._verify_final(request, staged, recover_dependencies=True)
                 self._fault("after_staging_read")
                 if claim_info is None:
                     claim = {"version": PROTOCOL_VERSION, "request": _decode(request.to_bytes()),
@@ -626,12 +695,19 @@ class ScienceCustodyFinalizer:
                 created, final = self.backend.create_trusted(request.final_root, request.final_relative_path, staged.raw)
                 final = _evidence(final, maximum=self.backend.max_artifact_bytes)
                 self._fault("after_final")
-            self._verify_final(request, final)
+            self._verify_final(request, final, recover_dependencies=True)
             receipt = self._receipt_for(request, claim_info, final)
             self._fault("before_receipt")
             _, persisted = self.backend.create_trusted("receipts", receipt_path(request.identity.digest()), receipt.to_bytes())
             if _evidence(persisted, maximum=MAX_REQUEST_BYTES).raw != receipt.to_bytes():
                 raise CustodyCommitIntegrityError("Concurrent durable receipt differs.")
+            self._fault("before_completion")
+            # This announces three already-completed barriers. Its own loss
+            # means Pending/reconfirmation, never premature cleanup authority.
+            completion = self._completion_bytes(request, claim_info, final, persisted)
+            _, announced = self.backend.publish_completion(completion_path(request.identity.digest()), completion)
+            if _evidence(announced, maximum=MAX_REQUEST_BYTES).raw != completion:
+                raise CustodyCommitIntegrityError("Concurrent completion differs.")
             self._fault("after_receipt")
             verified = self._existing(request, claim_info)
             if verified is None:

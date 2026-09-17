@@ -9,9 +9,10 @@ import time
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from datetime import datetime, timedelta
-from typing import Iterable
+from typing import TYPE_CHECKING, Iterable
 
-import requests
+if TYPE_CHECKING:
+    import requests
 
 from momentum_hunter.broad_discovery import (
     DiscoveryPageInput,
@@ -244,6 +245,9 @@ class FinvizProvider(MarketDataProvider):
         backoff_seconds: tuple[int, ...] = FINVIZ_BACKOFF_SECONDS,
         quote_backoff_seconds: tuple[int, ...] = FINVIZ_QUOTE_BACKOFF_SECONDS,
     ) -> None:
+        # HTTP initialization is not part of importing shared provider contracts.
+        import requests
+
         self.sleeper = sleeper
         self.backoff_seconds = backoff_seconds
         self.quote_backoff_seconds = quote_backoff_seconds
@@ -802,6 +806,8 @@ class FinvizProvider(MarketDataProvider):
         backoff_seconds: tuple[int, ...] | None = None,
         timeout_seconds: float = 20,
     ) -> requests.Response:
+        import requests
+
         last_error: Exception | None = None
         retry_delays = self.backoff_seconds if backoff_seconds is None else backoff_seconds
         attempts = len(retry_delays) + 1
