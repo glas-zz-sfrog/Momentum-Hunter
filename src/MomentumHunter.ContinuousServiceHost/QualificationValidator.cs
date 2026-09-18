@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.ComponentModel;
+using System.IO.Pipes;
 using System.Runtime.InteropServices;
 using System.Security.Cryptography;
 using System.Text;
@@ -33,8 +34,20 @@ internal static class QualificationValidator
         Directory.CreateDirectory(root);
         if (diagnosticOnly) info.Environment["MH_QUALIFICATION_DIAGNOSTIC_ROOT"] = Path.GetFullPath(root);
         if (requireHandshake) info.Environment["MH_QUALIFICATION_DIAGNOSTIC_PARENT_ACK"] = "REQUIRED";
+        var diagnosticPipeName = requireHandshake ?
+            "MomentumHunter-Qualification-" + Guid.NewGuid().ToString("N") : null;
+        using var diagnosticPipe = requireHandshake ? new NamedPipeServerStream(
+            diagnosticPipeName!,
+            PipeDirection.InOut, 1, PipeTransmissionMode.Byte,
+            PipeOptions.Asynchronous | PipeOptions.CurrentUserOnly) : null;
+        if (diagnosticPipe is not null)
+            info.Environment["MH_QUALIFICATION_DIAGNOSTIC_PIPE"] = @"\\.\pipe\" + diagnosticPipeName;
+        else
+            info.Environment.Remove("MH_QUALIFICATION_DIAGNOSTIC_PIPE");
         var stagePath = Path.Combine(root, "python-stages.log");
         var stackPath = Path.Combine(root, "python-stacks.log");
+        using var authenticatedStages = requireHandshake ? new FileStream(stagePath,
+            FileMode.CreateNew, FileAccess.Write, FileShare.Read) : null;
         using var events = new FileStream(Path.Combine(root, "events.jsonl"), FileMode.CreateNew, FileAccess.Write, FileShare.Read);
         var sync = new object();
         void Record(string stage, object detail)
@@ -63,13 +76,15 @@ internal static class QualificationValidator
         var environment = new Dictionary<string, string?>();
         foreach (var key in new[] { "PATH", "SystemRoot", "TEMP", "TMP", "USERPROFILE", "HOME",
             "PYTHONHOME", "PYTHONPATH", "PYTHONUTF8", "PYTHONDONTWRITEBYTECODE", "MOMENTUM_HUNTER_CONTINUOUS_SERVICE_MODE",
-            "MH_QUALIFICATION_DIAGNOSTIC_ROOT" })
+            "MH_QUALIFICATION_DIAGNOSTIC_ROOT", "MH_QUALIFICATION_DIAGNOSTIC_PIPE" })
             if (info.Environment.TryGetValue(key, out var value)) environment[key] = value;
         Record("LAUNCH_INTENT", new { launcherPid = launcher.Id, launcherBirth = launcher.StartTime.ToUniversalTime(),
             launcherImage = Environment.ProcessPath, childImage = info.FileName, argv = info.ArgumentList.ToArray(),
             workingDirectory = info.WorkingDirectory, environment, timeoutSeconds = timeout.TotalSeconds,
             descendantScope = "CHILD_TREE_TERMINATION_ON_FAILURE; external observer must independently prove descendant chronology" });
-        if (diagnosticOnly) Record("DIAGNOSTIC_ARMED", new { stagePath, stackPath, stackTimerSeconds = 20,
+        if (diagnosticOnly) Record("DIAGNOSTIC_ARMED", new { stagePath, stackPath,
+            pipeName = diagnosticPipeName, stageCustody = requireHandshake ? "PARENT_OWNED_PIPE_CLIENT_PID_BOUND" : "LOCAL_ONLY",
+            stackTimerSeconds = 20,
             acceptanceTimeoutSeconds = timeout.TotalSeconds });
         info.UseShellExecute = false;
         info.CreateNoWindow = true;
@@ -89,6 +104,7 @@ internal static class QualificationValidator
         using var stopReads = new CancellationTokenSource();
         Task<long>? stdout = null, stderr = null;
         Task<StageActorBinding?>? activationWatch = null;
+        Task? pipeCapture = null;
         StageActorBinding? stageActor = null;
         void Cancel(string source)
         {
@@ -158,6 +174,9 @@ internal static class QualificationValidator
             Record("CHILD_STARTED", new { pid = child.Id, birth = child.StartTime.ToUniversalTime() });
             stdout = Drain(child.StandardOutput.BaseStream, output, "STDOUT");
             stderr = Drain(child.StandardError.BaseStream, error, "STDERR");
+            if (requireHandshake)
+                pipeCapture = CaptureAuthenticatedStagesAsync(diagnosticPipe!, authenticatedStages!,
+                    child, info.FileName, Record, Cancel);
             if (requireHandshake)
                 activationWatch = WatchActivationAsync(stagePath, root, child, info.FileName,
                     interrupt.Task, Record, Cancel);
@@ -232,6 +251,15 @@ internal static class QualificationValidator
         finally
         {
             stopReads.Cancel();
+            if (pipeCapture is not null)
+            {
+                try { await pipeCapture.WaitAsync(TimeSpan.FromSeconds(7)); }
+                catch (Exception ex)
+                {
+                    cleanup = false;
+                    Record("DIAGNOSTIC_PIPE_UNPROVEN", new { type = ex.GetType().Name, ex.Message });
+                }
+            }
             if (activationWatch is not null)
             {
                 try { stageActor = await activationWatch.WaitAsync(TimeSpan.FromSeconds(7)); }
@@ -324,6 +352,55 @@ internal static class QualificationValidator
     private sealed record StageActorBinding(int Pid, long Birth, int? ParentPid,
         string Image, string ImageSha256, string ExpectedImage);
 
+    private static async Task CaptureAuthenticatedStagesAsync(NamedPipeServerStream pipe,
+        FileStream stageSink, Process child, string executable,
+        Action<string, object> record, Action<string> cancel)
+    {
+        try
+        {
+            using var connectionLimit = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+            await pipe.WaitForConnectionAsync(connectionLimit.Token);
+            if (!GetNamedPipeClientProcessId(pipe.SafePipeHandle.DangerousGetHandle(), out var nativePid) ||
+                nativePid == 0 || nativePid > int.MaxValue)
+                throw new InvalidDataException("DIAGNOSTIC_PIPE_CLIENT_PID_UNAVAILABLE");
+            var actor = BindStageActor((int)nativePid, child, executable);
+            record("DIAGNOSTIC_PIPE_CLIENT_BOUND", actor);
+            var row = new List<byte>(256);
+            var one = new byte[1];
+            while (true)
+            {
+                var read = await pipe.ReadAsync(one);
+                if (read == 0) break;
+                if (one[0] != (byte)'\n')
+                {
+                    if (row.Count == 255) throw new InvalidDataException("DIAGNOSTIC_PIPE_ROW_TOO_LONG");
+                    row.Add(one[0]);
+                    continue;
+                }
+                var bytes = row.ToArray();
+                var fields = Encoding.ASCII.GetString(bytes).Split('|');
+                if (fields.Length != 3 || !long.TryParse(fields[0], out var at) || at <= 0 ||
+                    !int.TryParse(fields[1], out var reportedPid) || reportedPid != actor.Pid ||
+                    fields[2].Length == 0 ||
+                    fields[2].Any(ch => !(ch is >= 'A' and <= 'Z' or >= '0' and <= '9' or '_')))
+                    throw new InvalidDataException("DIAGNOSTIC_PIPE_INVALID_STAGE_ROW");
+                stageSink.Write(bytes);
+                stageSink.WriteByte((byte)'\n');
+                stageSink.Flush(true);
+                await pipe.WriteAsync(new byte[] { (byte)'1' });
+                await pipe.FlushAsync();
+                row.Clear();
+            }
+            if (row.Count != 0) throw new InvalidDataException("DIAGNOSTIC_PIPE_PARTIAL_ROW");
+            record("DIAGNOSTIC_PIPE_CLOSED", new { actor.Pid, stageBytes = stageSink.Length });
+        }
+        catch (Exception ex)
+        {
+            record("DIAGNOSTIC_PIPE_FAILURE", new { type = ex.GetType().Name, ex.Message });
+            cancel("DIAGNOSTIC_ACTIVATION_FAILURE");
+        }
+    }
+
     private static StageSnapshot ReadStages(string path)
     {
         var names = new HashSet<string>(StringComparer.Ordinal);
@@ -335,6 +412,7 @@ internal static class QualificationValidator
             if (stream.Length > 65536) return new StageSnapshot(names, null, "STAGE_FILE_TOO_LARGE");
             using var reader = new StreamReader(stream, Encoding.ASCII);
             var content = reader.ReadToEnd();
+            if (content.Length == 0) return new StageSnapshot(names, null, null);
             int? pid = null;
             var handshake = new[] { "H2_PYTHON_RUNTIME_STARTED", "H3_DIAGNOSTIC_BOOTSTRAP_ACTIVE",
                 "H4_TARGET_MODULE_ENTRY_REACHED", "H5_PRINT_INSTALL_PLAN_ENTRY_REACHED" };
@@ -501,6 +579,9 @@ internal static class QualificationValidator
     [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
     private static extern bool QueryFullProcessImageNameW(IntPtr process, uint flags,
         StringBuilder image, ref uint length);
+
+    [DllImport("kernel32.dll", SetLastError = true)]
+    private static extern bool GetNamedPipeClientProcessId(IntPtr pipe, out uint clientProcessId);
 
     [DllImport("kernel32.dll", SetLastError = true)]
     private static extern bool CloseHandle(IntPtr handle);

@@ -289,7 +289,11 @@ public sealed class ContinuousProcessWorker(
                     System.Text.RegularExpressions.RegexOptions.IgnoreCase))
                     info.Environment.Remove(key);
         var diagnosticOnly = options.Qualification && options.Role == "runtime";
-        if (!diagnosticOnly) info.Environment.Remove("MH_QUALIFICATION_DIAGNOSTIC_ROOT");
+        if (!diagnosticOnly)
+        {
+            info.Environment.Remove("MH_QUALIFICATION_DIAGNOSTIC_ROOT");
+            info.Environment.Remove("MH_QUALIFICATION_DIAGNOSTIC_PIPE");
+        }
         using var descriptor = JsonDocument.Parse(File.ReadAllBytes(options.ConfigPath));
         var evidence = Path.Combine(descriptor.RootElement.GetProperty("logRoot").GetString()!,
             options.Role, "validator-" + Guid.NewGuid().ToString("N"));

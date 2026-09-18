@@ -91,7 +91,7 @@ class PhysicalShapeTraceTests(unittest.TestCase):
     def test_wrong_build_is_visible(self) -> None:
         backup = self.installed_hook.read_bytes()
         self.installed_hook.write_bytes(backup.replace(
-            b"ARGUS_019M_DIAGNOSTIC_V1", b"ARGUS_019M_DIAGNOSTIC_BAD"))
+            b"ARGUS_019M_DIAGNOSTIC_V2", b"ARGUS_019M_DIAGNOSTIC_BAD"))
         try:
             trace = self.root / "wrong-build"
             trace.mkdir()

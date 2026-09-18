@@ -1,4 +1,6 @@
 using System.Diagnostics;
+using System.IO.Pipes;
+using System.Text;
 using System.Text.Json;
 
 namespace MomentumHunter.ContinuousServiceHost;
@@ -47,6 +49,37 @@ internal static class Program
                 return document.RootElement.Clone();
         }
         throw new InvalidDataException("Missing event: " + stage);
+    }
+
+    private static async Task<(string PipeName, int ChildPid)> WaitForLaunchIdentity(string path)
+    {
+        var deadline = Stopwatch.StartNew();
+        while (deadline.Elapsed < TimeSpan.FromSeconds(5))
+        {
+            string? pipeName = null;
+            int? childPid = null;
+            try
+            {
+                using var stream = new FileStream(Path.Combine(path, "events.jsonl"),
+                    FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
+                using var reader = new StreamReader(stream);
+                foreach (var line in reader.ReadToEnd().Split('\n').Where(line => line.Length > 0))
+                {
+                    using var document = JsonDocument.Parse(line);
+                    var stage = document.RootElement.GetProperty("stage").GetString();
+                    if (stage == "DIAGNOSTIC_ARMED")
+                        pipeName = document.RootElement.GetProperty("detail").GetProperty("pipeName").GetString();
+                    else if (stage == "H1_CHILD_PROCESS_CREATED")
+                        childPid = document.RootElement.GetProperty("detail").GetProperty("pid").GetInt32();
+                }
+            }
+            catch (IOException) { }
+            catch (JsonException) { }
+            if (pipeName is not null && childPid is not null)
+                return (pipeName, childPid.Value);
+            await Task.Delay(10);
+        }
+        throw new TimeoutException("Launch identity was not durably recorded.");
     }
 
     private static async Task<int> Main(string[] args)
@@ -111,16 +144,19 @@ internal static class Program
             var foreignWriter = Task.Run(async () =>
             {
                 while (!Directory.Exists(foreignPath)) await Task.Delay(5);
+                var launch = await WaitForLaunchIdentity(foreignPath);
+                var shortName = launch.PipeName.Replace(@"\\.\pipe\", "", StringComparison.Ordinal);
+                using var pipe = new NamedPipeClientStream(".", shortName, PipeDirection.InOut,
+                    PipeOptions.Asynchronous);
+                await pipe.ConnectAsync(5000);
                 var stamp = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() * 1000000;
-                var payload = $"{stamp}|{Environment.ProcessId}|H2_PYTHON_RUNTIME_STARTED\n" +
-                    $"{stamp + 1}|{Environment.ProcessId}|H3_DIAGNOSTIC_BOOTSTRAP_ACTIVE\n";
+                var payload = $"{stamp}|{launch.ChildPid}|H2_PYTHON_RUNTIME_STARTED\n" +
+                    $"{stamp + 1}|{launch.ChildPid}|H3_DIAGNOSTIC_BOOTSTRAP_ACTIVE\n";
                 try
                 {
-                    using var file = new FileStream(Path.Combine(foreignPath, "python-stages.log"),
-                        FileMode.CreateNew, FileAccess.Write, FileShare.ReadWrite);
-                    var bytes = System.Text.Encoding.ASCII.GetBytes(payload);
-                    file.Write(bytes);
-                    file.Flush(true);
+                    var bytes = Encoding.ASCII.GetBytes(payload);
+                    await pipe.WriteAsync(bytes);
+                    await pipe.FlushAsync();
                 }
                 catch (IOException) { }
             });
@@ -130,9 +166,12 @@ internal static class Program
                 diagnosticOnly: true, requireHandshake: true);
             await foreignWriter;
             Require(!foreign.Accepted && foreign.CancellationSource == "DIAGNOSTIC_ACTIVATION_FAILURE" &&
-                Activation(foreignPath) == "DIAGNOSTIC_ACTOR_UNBOUND",
-                "foreign stage actor cannot satisfy the handshake");
-            _ = Event(foreignPath, "DIAGNOSTIC_ACTOR_BINDING_FAILURE");
+                Activation(foreignPath) == "DIAGNOSTIC_NOT_ACTIVE" &&
+                new FileInfo(Path.Combine(foreignPath, "python-stages.log")).Length == 0,
+                "foreign writer cannot satisfy the handshake by claiming the real child PID");
+            Require(Event(foreignPath, "DIAGNOSTIC_PIPE_FAILURE").GetProperty("detail")
+                .GetProperty("Message").GetString() == "STAGE_ACTOR_PREDATES_CHILD",
+                "pipe client identity, not the claimed row PID, controls attribution");
 
             var stalledPath = Path.Combine(root, "stalled-startup");
             var timer = Stopwatch.StartNew();
@@ -175,7 +214,7 @@ internal static class Program
                 "activation failure terminates the owned descendant tree");
 
             Console.WriteLine(JsonSerializer.Serialize(new { status = "PASS", root,
-                checks = 12, exactActivation = Activation(exactPath),
+                checks = 13, exactActivation = Activation(exactPath),
                 missingActivation = Activation(noSitePath),
                 stalledActivation = Activation(stalledPath),
                 stalledSeconds = timer.Elapsed.TotalSeconds,

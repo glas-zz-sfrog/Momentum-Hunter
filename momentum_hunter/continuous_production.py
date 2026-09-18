@@ -18,7 +18,7 @@ def _diagnostic_stage(stage: str) -> None:
     trace = getattr(hook, "argus_trace", None)
     if not callable(trace):
         raise RuntimeError("DIAGNOSTIC_ACTIVATION_FAILURE: startup hook is not armed")
-    if getattr(hook, "ARGUS_DIAGNOSTIC_BUILD_ID", None) != "ARGUS_019M_DIAGNOSTIC_V1":
+    if getattr(hook, "ARGUS_DIAGNOSTIC_BUILD_ID", None) != "ARGUS_019M_DIAGNOSTIC_V2":
         raise RuntimeError("DIAGNOSTIC_ACTIVATION_FAILURE: instrumentation build mismatch")
     trace(stage)
 
