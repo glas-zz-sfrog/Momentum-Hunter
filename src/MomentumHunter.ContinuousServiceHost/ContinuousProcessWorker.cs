@@ -296,7 +296,7 @@ public sealed class ContinuousProcessWorker(
         var writerProtocol = options.Role == "writer" ? new WriterValidationProtocol(descriptor.RootElement) : null;
         var result = await QualificationValidator.RunAsync(info, evidence, TimeSpan.FromSeconds(30), token,
             writerProtocol: writerProtocol, diagnosticOnly: diagnosticOnly,
-            requireOuterJob: diagnosticOnly);
+            requireOuterJob: diagnosticOnly, requireHandshake: diagnosticOnly);
         if (!result.Accepted)
             throw new InvalidOperationException("Read-only host configuration validation failed; durable evidence: " + evidence);
     }

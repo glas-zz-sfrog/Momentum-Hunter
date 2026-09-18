@@ -17,10 +17,13 @@ def _diagnostic_stage(stage: str) -> None:
     hook = _diagnostic_sys.modules.get("sitecustomize")
     trace = getattr(hook, "argus_trace", None)
     if not callable(trace):
-        raise RuntimeError("Qualification diagnostic startup hook is not armed")
+        raise RuntimeError("DIAGNOSTIC_ACTIVATION_FAILURE: startup hook is not armed")
+    if getattr(hook, "ARGUS_DIAGNOSTIC_BUILD_ID", None) != "ARGUS_019M_DIAGNOSTIC_V1":
+        raise RuntimeError("DIAGNOSTIC_ACTIVATION_FAILURE: instrumentation build mismatch")
     trace(stage)
 
 
+_diagnostic_stage("H4_TARGET_MODULE_ENTRY_REACHED")
 _diagnostic_stage("MODULE_IMPORT_ENTER")
 
 import argparse
@@ -1391,6 +1394,8 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--host-generation")
     args = parser.parse_args(argv)
     _diagnostic_stage("ARGUMENT_PARSE_EXIT")
+    if args.print_install_plan:
+        _diagnostic_stage("H5_PRINT_INSTALL_PLAN_ENTRY_REACHED")
     if args.print_config_fingerprint:
         config = json.loads(args.config.read_text(encoding="ascii"))
         if not isinstance(config, dict):

@@ -23,10 +23,12 @@ internal static class QualificationValidator
     internal static async Task<ValidatorResult> RunAsync(ProcessStartInfo info, string root,
         TimeSpan timeout, CancellationToken caller, int streamLimit = 65536,
         WriterValidationProtocol? writerProtocol = null, bool diagnosticOnly = false,
-        bool requireOuterJob = false)
+        bool requireOuterJob = false, bool requireHandshake = false)
     {
         if (timeout <= TimeSpan.Zero || timeout > TimeSpan.FromMinutes(2) || streamLimit is < 1 or > 1048576)
             throw new ArgumentOutOfRangeException(nameof(timeout));
+        if (requireHandshake && !diagnosticOnly)
+            throw new ArgumentException("A diagnostic handshake requires diagnostic mode.");
         if (Directory.Exists(root) || File.Exists(root)) throw new IOException("Validator evidence already exists.");
         Directory.CreateDirectory(root);
         if (diagnosticOnly) info.Environment["MH_QUALIFICATION_DIAGNOSTIC_ROOT"] = Path.GetFullPath(root);
@@ -85,6 +87,7 @@ internal static class QualificationValidator
         bool started = false, cleanup = false;
         using var stopReads = new CancellationTokenSource();
         Task<long>? stdout = null, stderr = null;
+        Task? activationWatch = null;
         void Cancel(string source)
         {
             lock (sync)
@@ -127,15 +130,27 @@ internal static class QualificationValidator
         {
             // A pre-canceled caller must never launch a child.
             caller.ThrowIfCancellationRequested();
-            if (diagnosticOnly) Record("CHILD_CREATE_REQUEST", new { executable = info.FileName });
+            if (diagnosticOnly)
+            {
+                Record("H0_PARENT_ABOUT_TO_CREATE_CHILD", new { executable = info.FileName });
+                Record("CHILD_CREATE_REQUEST", new { executable = info.FileName });
+            }
             if (!child.Start()) throw new InvalidOperationException("Validator start returned false.");
             started = true;
             childPid = child.Id;
             childBirth = child.StartTime.ToUniversalTime().ToFileTimeUtc();
             diagnosticJob?.Assign(child);
+            if (diagnosticOnly)
+                Record("H1_CHILD_PROCESS_CREATED", new { pid = childPid, birth = childBirth,
+                    executable = info.FileName, executableSha256 = Hash(info.FileName),
+                    commandSha256 = HashBytes(JsonSerializer.SerializeToUtf8Bytes(info.ArgumentList.ToArray())),
+                    environmentSha256 = HashBytes(JsonSerializer.SerializeToUtf8Bytes(
+                        info.Environment.OrderBy(item => item.Key, StringComparer.OrdinalIgnoreCase).ToArray())) });
             Record("CHILD_STARTED", new { pid = child.Id, birth = child.StartTime.ToUniversalTime() });
             stdout = Drain(child.StandardOutput.BaseStream, output, "STDOUT");
             stderr = Drain(child.StandardError.BaseStream, error, "STDERR");
+            if (requireHandshake)
+                activationWatch = WatchActivationAsync(stagePath, child, interrupt.Task, Record, Cancel);
             using (var timer = new CancellationTokenSource(timeout))
             using (caller.Register(() => Cancel("CALLER")))
             using (timer.Token.Register(() => Cancel("TIMER")))
@@ -210,6 +225,15 @@ internal static class QualificationValidator
         finally
         {
             stopReads.Cancel();
+            if (activationWatch is not null)
+            {
+                try { await activationWatch.WaitAsync(TimeSpan.FromSeconds(6)); }
+                catch (Exception ex)
+                {
+                    cleanup = false;
+                    Record("ACTIVATION_WATCH_UNPROVEN", new { type = ex.GetType().Name, ex.Message });
+                }
+            }
             var streamTasks = new[] { stdout, stderr }.Where(task => task is not null)
                 .Select(task => (Task)task!).ToArray();
             try
@@ -228,9 +252,21 @@ internal static class QualificationValidator
         {
             var stageBytes = File.Exists(stagePath) ? new FileInfo(stagePath).Length : 0;
             var stackExists = File.Exists(stackPath);
+            var stages = ReadStages(stagePath);
+            var required = new[] { "H2_PYTHON_RUNTIME_STARTED", "H3_DIAGNOSTIC_BOOTSTRAP_ACTIVE",
+                "H4_TARGET_MODULE_ENTRY_REACHED", "H5_PRINT_INSTALL_PLAN_ENTRY_REACHED" };
+            var missing = required.Where(stage => !stages.Names.Contains(stage)).ToArray();
+            var activation = stages.Conflict is not null ? "DIAGNOSTIC_CONFLICT" :
+                missing.Length == 0 ? "DIAGNOSTIC_ACTIVE" :
+                stages.Names.Count == 0 ? "DIAGNOSTIC_NOT_ACTIVE" : "DIAGNOSTIC_ACTIVATION_PARTIAL";
+            Record("DIAGNOSTIC_ACTIVATION_RESULT", new { classification = activation,
+                stagePid = stages.Pid, missing, stages.Conflict });
             Record("DIAGNOSTIC_RESULT", new { stageBytes, stackExists,
                 stackBytes = stackExists ? new FileInfo(stackPath).Length : 0 });
-            if (exit == 0 && cancellation is null && failure is null && (stageBytes == 0 || !stackExists))
+            if (requireHandshake && (missing.Length > 0 || stages.Conflict is not null) &&
+                failure is null && cancellation is null)
+                failure = "DIAGNOSTIC_ACTIVATION_FAILURE:" + (stages.Conflict ?? missing[0]);
+            else if (exit == 0 && cancellation is null && failure is null && (stageBytes == 0 || !stackExists))
                 failure = "DIAGNOSTIC_TRACE_NOT_ARMED";
         }
         var result = new ValidatorResult(exit, cancellation, stdoutCount, stderrCount, cleanup, failure);
@@ -270,6 +306,76 @@ internal static class QualificationValidator
     {
         using var stream = File.Open(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
         return Convert.ToHexString(SHA256.HashData(stream));
+    }
+
+    private static string HashBytes(byte[] bytes) => Convert.ToHexString(SHA256.HashData(bytes));
+
+    private sealed record StageSnapshot(HashSet<string> Names, int? Pid, string? Conflict);
+
+    private static StageSnapshot ReadStages(string path)
+    {
+        var names = new HashSet<string>(StringComparer.Ordinal);
+        if (!File.Exists(path)) return new StageSnapshot(names, null, null);
+        try
+        {
+            using var stream = new FileStream(path, FileMode.Open, FileAccess.Read,
+                FileShare.ReadWrite | FileShare.Delete);
+            if (stream.Length > 65536) return new StageSnapshot(names, null, "STAGE_FILE_TOO_LARGE");
+            using var reader = new StreamReader(stream, Encoding.ASCII);
+            var content = reader.ReadToEnd();
+            int? pid = null;
+            var handshake = new[] { "H2_PYTHON_RUNTIME_STARTED", "H3_DIAGNOSTIC_BOOTSTRAP_ACTIVE",
+                "H4_TARGET_MODULE_ENTRY_REACHED", "H5_PRINT_INSTALL_PLAN_ENTRY_REACHED" };
+            var nextHandshake = 0;
+            foreach (var line in content.Split('\n').SkipLast(1))
+            {
+                var fields = line.TrimEnd('\r').Split('|');
+                if (fields.Length != 3 || !long.TryParse(fields[0], out var at) || at <= 0 ||
+                    !int.TryParse(fields[1], out var rowPid) || rowPid <= 0 ||
+                    fields[2].Length == 0 || fields[2].Any(ch => !(ch is >= 'A' and <= 'Z' or >= '0' and <= '9' or '_')))
+                    return new StageSnapshot(names, pid, "INVALID_STAGE_ROW");
+                if (pid is not null && pid != rowPid)
+                    return new StageSnapshot(names, pid, "MULTIPLE_STAGE_ACTORS");
+                if (handshake.Contains(fields[2]))
+                {
+                    if (nextHandshake >= handshake.Length || fields[2] != handshake[nextHandshake])
+                        return new StageSnapshot(names, pid, "HANDSHAKE_OUT_OF_ORDER");
+                    nextHandshake++;
+                }
+                pid = rowPid;
+                names.Add(fields[2]);
+            }
+            if (!content.EndsWith('\n')) return new StageSnapshot(names, pid, "PARTIAL_STAGE_ROW");
+            return new StageSnapshot(names, pid, null);
+        }
+        catch (IOException) { return new StageSnapshot(names, null, "STAGE_READ_IO_FAILURE"); }
+        catch (UnauthorizedAccessException) { return new StageSnapshot(names, null, "STAGE_READ_DENIED"); }
+    }
+
+    private static async Task WatchActivationAsync(string stagePath, Process child, Task interrupted,
+        Action<string, object> record, Action<string> cancel)
+    {
+        var deadline = Stopwatch.StartNew();
+        while (deadline.Elapsed < TimeSpan.FromSeconds(5))
+        {
+            var stages = ReadStages(stagePath);
+            if (stages.Conflict is not null)
+            {
+                record("DIAGNOSTIC_ACTIVATION_FAILURE", new { stages.Conflict });
+                cancel("DIAGNOSTIC_ACTIVATION_FAILURE");
+                return;
+            }
+            if (stages.Names.Contains("H2_PYTHON_RUNTIME_STARTED") &&
+                stages.Names.Contains("H3_DIAGNOSTIC_BOOTSTRAP_ACTIVE"))
+            {
+                record("DIAGNOSTIC_BOOTSTRAP_OBSERVED", new { stagePid = stages.Pid });
+                return;
+            }
+            if (interrupted.IsCompleted || child.HasExited) return;
+            await Task.Delay(50);
+        }
+        record("DIAGNOSTIC_ACTIVATION_FAILURE", new { reason = "H2_H3_NOT_OBSERVED_WITHIN_5_SECONDS" });
+        cancel("DIAGNOSTIC_ACTIVATION_FAILURE");
     }
 
     private static byte[] Snapshot(FileStream stream)
