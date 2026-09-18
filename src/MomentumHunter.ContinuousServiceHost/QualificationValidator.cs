@@ -20,12 +20,15 @@ internal static class QualificationValidator
 {
     internal static async Task<ValidatorResult> RunAsync(ProcessStartInfo info, string root,
         TimeSpan timeout, CancellationToken caller, int streamLimit = 65536,
-        WriterValidationProtocol? writerProtocol = null)
+        WriterValidationProtocol? writerProtocol = null, bool diagnosticOnly = false)
     {
         if (timeout <= TimeSpan.Zero || timeout > TimeSpan.FromMinutes(2) || streamLimit is < 1 or > 1048576)
             throw new ArgumentOutOfRangeException(nameof(timeout));
         if (Directory.Exists(root) || File.Exists(root)) throw new IOException("Validator evidence already exists.");
         Directory.CreateDirectory(root);
+        if (diagnosticOnly) info.Environment["MH_QUALIFICATION_DIAGNOSTIC_ROOT"] = Path.GetFullPath(root);
+        var stagePath = Path.Combine(root, "python-stages.log");
+        var stackPath = Path.Combine(root, "python-stacks.log");
         using var events = new FileStream(Path.Combine(root, "events.jsonl"), FileMode.CreateNew, FileAccess.Write, FileShare.Read);
         var sync = new object();
         void Record(string stage, object detail)
@@ -41,12 +44,15 @@ internal static class QualificationValidator
         using var launcher = Process.GetCurrentProcess();
         var environment = new Dictionary<string, string?>();
         foreach (var key in new[] { "PATH", "SystemRoot", "TEMP", "TMP", "USERPROFILE", "HOME",
-            "PYTHONHOME", "PYTHONPATH", "PYTHONUTF8", "PYTHONDONTWRITEBYTECODE", "MOMENTUM_HUNTER_CONTINUOUS_SERVICE_MODE" })
+            "PYTHONHOME", "PYTHONPATH", "PYTHONUTF8", "PYTHONDONTWRITEBYTECODE", "MOMENTUM_HUNTER_CONTINUOUS_SERVICE_MODE",
+            "MH_QUALIFICATION_DIAGNOSTIC_ROOT" })
             if (info.Environment.TryGetValue(key, out var value)) environment[key] = value;
         Record("LAUNCH_INTENT", new { launcherPid = launcher.Id, launcherBirth = launcher.StartTime.ToUniversalTime(),
             launcherImage = Environment.ProcessPath, childImage = info.FileName, argv = info.ArgumentList.ToArray(),
             workingDirectory = info.WorkingDirectory, environment, timeoutSeconds = timeout.TotalSeconds,
             descendantScope = "CHILD_TREE_TERMINATION_ON_FAILURE; external observer must independently prove descendant chronology" });
+        if (diagnosticOnly) Record("DIAGNOSTIC_ARMED", new { stagePath, stackPath, stackTimerSeconds = 20,
+            acceptanceTimeoutSeconds = timeout.TotalSeconds });
         info.UseShellExecute = false;
         info.CreateNoWindow = true;
         info.RedirectStandardOutput = true;
@@ -105,6 +111,7 @@ internal static class QualificationValidator
         {
             // A pre-canceled caller must never launch a child.
             caller.ThrowIfCancellationRequested();
+            if (diagnosticOnly) Record("CHILD_CREATE_REQUEST", new { executable = info.FileName });
             if (!child.Start()) throw new InvalidOperationException("Validator start returned false.");
             started = true;
             childPid = child.Id;
@@ -117,6 +124,7 @@ internal static class QualificationValidator
             using (timer.Token.Register(() => Cancel("TIMER")))
             {
                 var exited = child.WaitForExitAsync();
+                if (diagnosticOnly) Record("PARENT_WAIT_ENTER", new { childPid, wait = "CHILD_EXIT_OR_INTERRUPT" });
                 await Task.WhenAny(exited, interrupt.Task);
                 if (interrupt.Task.IsCompleted)
                 {
@@ -125,6 +133,19 @@ internal static class QualificationValidator
                     if (!child.HasExited) child.Kill(entireProcessTree: true);
                 }
                 await exited.WaitAsync(TimeSpan.FromSeconds(10));
+                if (diagnosticOnly) Record("PARENT_WAIT_EXIT", new { childPid, interrupted = interrupt.Task.IsCompleted });
+                if (diagnosticOnly && cancellation == "TIMER")
+                {
+                    double? childCpuMilliseconds = null;
+                    try { childCpuMilliseconds = child.TotalProcessorTime.TotalMilliseconds; }
+                    catch (InvalidOperationException) { }
+                    catch (System.ComponentModel.Win32Exception) { }
+                    Record("TIMEOUT_POSTMORTEM", new { pid = child.Id, exitCode = child.ExitCode,
+                        childCpuMilliseconds, stdoutRetainedBytes = output.Length,
+                        stderrRetainedBytes = error.Length,
+                        stageBytes = File.Exists(stagePath) ? new FileInfo(stagePath).Length : 0,
+                        stackBytes = File.Exists(stackPath) ? new FileInfo(stackPath).Length : 0 });
+                }
                 // An inherited pipe must not hold this host forever after root exit.
                 await Task.WhenAll(stdout, stderr).WaitAsync(TimeSpan.FromSeconds(10));
                 stdoutCount = await stdout;
@@ -167,6 +188,15 @@ internal static class QualificationValidator
         }
         output.Flush(true);
         error.Flush(true);
+        if (diagnosticOnly)
+        {
+            var stageBytes = File.Exists(stagePath) ? new FileInfo(stagePath).Length : 0;
+            var stackExists = File.Exists(stackPath);
+            Record("DIAGNOSTIC_RESULT", new { stageBytes, stackExists,
+                stackBytes = stackExists ? new FileInfo(stackPath).Length : 0 });
+            if (exit == 0 && cancellation is null && failure is null && (stageBytes == 0 || !stackExists))
+                failure = "DIAGNOSTIC_TRACE_NOT_ARMED";
+        }
         var result = new ValidatorResult(exit, cancellation, stdoutCount, stderrCount, cleanup, failure);
         if (writerProtocol is not null)
         {
@@ -187,6 +217,12 @@ internal static class QualificationValidator
         Record("TERMINAL", result);
         var summary = JsonSerializer.SerializeToUtf8Bytes(new { result, result.Accepted,
             stdoutSha256 = Hash(Path.Combine(root, "stdout.bin")), stderrSha256 = Hash(Path.Combine(root, "stderr.bin")),
+            diagnostic = diagnosticOnly ? new {
+                stageSha256 = File.Exists(stagePath) ? Hash(stagePath) : null,
+                stackSha256 = File.Exists(stackPath) ? Hash(stackPath) : null,
+                stageBytes = File.Exists(stagePath) ? new FileInfo(stagePath).Length : 0,
+                stackBytes = File.Exists(stackPath) ? new FileInfo(stackPath).Length : 0,
+            } : null,
             durability = "STREAMS_AND_TERMINAL_FLUSHED_BEFORE_PROCESS_HANDLE_DISPOSAL" });
         using var receipt = new FileStream(Path.Combine(root, "result.json"), FileMode.CreateNew, FileAccess.Write, FileShare.Read);
         receipt.Write(summary);

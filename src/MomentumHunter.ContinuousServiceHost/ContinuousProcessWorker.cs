@@ -293,7 +293,7 @@ public sealed class ContinuousProcessWorker(
             options.Role, "validator-" + Guid.NewGuid().ToString("N"));
         var writerProtocol = options.Role == "writer" ? new WriterValidationProtocol(descriptor.RootElement) : null;
         var result = await QualificationValidator.RunAsync(info, evidence, TimeSpan.FromSeconds(30), token,
-            writerProtocol: writerProtocol);
+            writerProtocol: writerProtocol, diagnosticOnly: true);
         if (!result.Accepted)
             throw new InvalidOperationException("Read-only host configuration validation failed; durable evidence: " + evidence);
     }

@@ -7,6 +7,22 @@ health reporting.  It has no account, position, Paper, Shadow, or order adapter.
 
 from __future__ import annotations
 
+import os as _diagnostic_os
+import sys as _diagnostic_sys
+
+
+def _diagnostic_stage(stage: str) -> None:
+    if "MH_QUALIFICATION_DIAGNOSTIC_ROOT" not in _diagnostic_os.environ:
+        return
+    hook = _diagnostic_sys.modules.get("sitecustomize")
+    trace = getattr(hook, "argus_trace", None)
+    if not callable(trace):
+        raise RuntimeError("Qualification diagnostic startup hook is not armed")
+    trace(stage)
+
+
+_diagnostic_stage("MODULE_IMPORT_ENTER")
+
 import argparse
 import base64
 import hashlib
@@ -93,6 +109,8 @@ from momentum_hunter.continuous_host_lifecycle import (
 if TYPE_CHECKING:
     from momentum_hunter.windows_science_custody import ScienceCustodyPolicy
 
+_diagnostic_stage("MODULE_IMPORT_EXIT")
+
 
 CENTRAL = ZoneInfo("America/Chicago")
 EASTERN = ZoneInfo("America/New_York")
@@ -173,18 +191,30 @@ def _atomic_replace(path: Path, payload: bytes) -> None:
 
 
 def _read_config(path: Path) -> dict[str, Any]:
+    _diagnostic_stage("CONFIG_READ_ENTER")
     try:
-        value = json.loads(path.read_text(encoding="ascii"))
+        raw = path.read_text(encoding="ascii")
     except (OSError, UnicodeError, json.JSONDecodeError) as exc:
         raise ProductionDeploymentError("Deployment configuration is unreadable.") from exc
+    _diagnostic_stage("CONFIG_READ_EXIT")
+    _diagnostic_stage("CONFIG_PARSE_ENTER")
+    try:
+        value = json.loads(raw)
+    except (OSError, UnicodeError, json.JSONDecodeError) as exc:
+        raise ProductionDeploymentError("Deployment configuration is unreadable.") from exc
+    _diagnostic_stage("CONFIG_PARSE_EXIT")
     if not isinstance(value, dict) or value.get("mode") != "RESEARCH_ONLY":
         raise ProductionDeploymentError("Deployment configuration is not research-only.")
     if value.get("orderCapability") != ORDER_CAPABILITY or value.get("activationProfile") != PROFILE:
         raise ProductionDeploymentError("Deployment capability profile is invalid.")
+    _diagnostic_stage("CONFIG_FINGERPRINT_ENTER")
     expected_configuration = _runtime_config(value).fingerprint
+    _diagnostic_stage("CONFIG_FINGERPRINT_EXIT")
     if value.get("configurationFingerprint") != expected_configuration:
         raise ProductionDeploymentError("Deployment configuration identity is invalid.")
+    _diagnostic_stage("HOST_VALIDATE_ENTER")
     validate_host(value, path)
+    _diagnostic_stage("HOST_VALIDATE_EXIT")
     return value
 
 
@@ -1350,6 +1380,7 @@ def finalize_research_session(runtime, phase, now):
 
 
 def main(argv: list[str] | None = None) -> int:
+    _diagnostic_stage("ARGUMENT_PARSE_ENTER")
     parser = argparse.ArgumentParser(description="Momentum Hunter research-only continuous deployment host")
     parser.add_argument("--role", choices=("writer", "runtime", "science"))
     parser.add_argument("--config", type=Path, required=True)
@@ -1359,6 +1390,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--host-control-stdin", action="store_true")
     parser.add_argument("--host-generation")
     args = parser.parse_args(argv)
+    _diagnostic_stage("ARGUMENT_PARSE_EXIT")
     if args.print_config_fingerprint:
         config = json.loads(args.config.read_text(encoding="ascii"))
         if not isinstance(config, dict):
@@ -1369,7 +1401,14 @@ def main(argv: list[str] | None = None) -> int:
         parser.error("--role is required unless a read-only configuration command is used")
     config = _read_config(args.config)
     if args.print_install_plan:
-        print(json.dumps(install_plan(config, args.config, Path.cwd(), Path(sys.executable)), indent=2))
+        _diagnostic_stage("INSTALL_PLAN_ENTER")
+        plan = install_plan(config, args.config, Path.cwd(), Path(sys.executable))
+        _diagnostic_stage("INSTALL_PLAN_EXIT")
+        _diagnostic_stage("INSTALL_PLAN_SERIALIZE_ENTER")
+        serialized = json.dumps(plan, indent=2)
+        _diagnostic_stage("INSTALL_PLAN_SERIALIZE_EXIT")
+        print(serialized)
+        _diagnostic_stage("INSTALL_PLAN_PRINT_EXIT")
         return 0
     if args.verify_writer_launch_profile:
         from momentum_hunter.windows_writer_profile import NativeWriterAdmission
