@@ -43,15 +43,19 @@ internal sealed class WriterValidationProtocol
             Need(S(result, "status") == "PASS" && S(result, "profile") == Profile, "RESULT_NOT_PASS");
             Need(N(result, "resourceCount") >= 0, "RESOURCE_COUNT");
             var observation = result.GetProperty("observation");
+            Keys(observation, "profile", "role", "provenance", "generation", "process", "parent", "scm", "token");
             Need(S(observation, "profile") == Profile && S(observation, "role") == "writer" &&
                 S(observation, "provenance") == "ACTUAL_NATIVE_PROCESS_TOKEN_AND_SCM_QUERY" &&
                 observation.GetProperty("generation").ValueKind == JsonValueKind.Null, "OBSERVATION");
             var process = observation.GetProperty("process");
             var parent = observation.GetProperty("parent");
+            Keys(process, "pid", "birth", "image");
+            Keys(parent, "pid", "birth", "image");
             Need(N(process, "pid") == childPid && N(process, "birth") == childBirth &&
                 N(parent, "pid") == parentPid && N(parent, "birth") == parentBirth, "ACTOR_IDENTITY");
             Need(S(process, "image") == S(writer, "python_path") && S(parent, "image") == S(writer, "host_path"), "IMAGE_IDENTITY");
             var scm = observation.GetProperty("scm");
+            Keys(scm, "service_name", "service_sid", "sid_type", "pid", "state", "required_privileges");
             Need(S(scm, "service_name") == service && S(scm, "service_sid") == sid &&
                 N(scm, "sid_type") == 3 && N(scm, "pid") == parentPid && N(scm, "state") == 4, "SCM_IDENTITY");
             var privileges = scm.GetProperty("required_privileges").EnumerateArray().Select(x => x.GetString()).ToArray();
@@ -147,8 +151,24 @@ internal sealed class WriterValidationProtocol
         Need(digest.Length == 64 && Convert.FromHexString(digest).SequenceEqual(SHA256.HashData(raw)), "DIAGNOSTIC_HASH");
         using var decoded = Parse(raw);
         var report = decoded.RootElement;
+        var reportKeys = new List<string> { "task", "schema", "phase", "service", "serviceSid", "pid", "utcUnixNs",
+            "profileSha256", "configurationSha256", "admissionBefore", "token", "scope", "qualificationInstance",
+            "serviceRole", "actions", "files", "services", "errors", "assumptions", "firstFalseAssumption",
+            "probeCount", "completed", "step", "binding", "sourceSha256", "tokenUnchanged", "expectedFileTargets",
+            "elapsedSeconds", "admissionAfter", "admissionIdentical" };
+        foreach (var optional in new[] { "admissionAfterObservation", "expectedServiceTargets", "progressOutputUnavailable" })
+            if (report.TryGetProperty(optional, out _)) reportKeys.Add(optional);
+        Keys(report, reportKeys.ToArray());
         Need(N(report, "schema") == 2 && S(report, "task") == "ARGUS-013B-FIRST-FALSE-ASSUMPTION-LADDER-016J" &&
             S(report, "phase") == "PRE_GENERATION_ADMISSION" && S(report, "serviceRole") == "writer", "DIAGNOSTIC_SCHEMA");
+        Need(S(report, "scope") == "FIXED_ROOTS_CODE_AND_REPLICA_LEAVES; NO_COMPLETE_DESCENDANT_OR_GLOBAL_HOST_ATTESTATION" &&
+            S(report, "actions") == "HANDLE_ACQUISITION_ONLY_NO_IO_OR_CONTROLS", "DIAGNOSTIC_SCOPE");
+        Need(N(report, "utcUnixNs") > 0 && report.GetProperty("elapsedSeconds").TryGetDouble(out var elapsed) &&
+            double.IsFinite(elapsed) && elapsed >= 0, "DIAGNOSTIC_OBSERVATION");
+        var sources = report.GetProperty("sourceSha256");
+        Keys(sources, "windows_writer_self_diagnostic.py", "windows_writer_profile.py", "windows_science_custody.py");
+        foreach (var source in sources.EnumerateObject())
+            Need(source.Value.GetString() is { Length: 64 } hash && Convert.FromHexString(hash).Length == 32, "DIAGNOSTIC_SOURCE_DIGEST");
         Need(N(report, "pid") == pid && S(report, "service") == service && S(report, "serviceSid") == sid &&
             S(report, "qualificationInstance") == S(config.GetProperty("host"), "instanceRoot"), "DIAGNOSTIC_ACTOR");
         Need(DigestMatches(S(report, "configurationSha256"), Canonical(config)) &&
@@ -160,13 +180,19 @@ internal sealed class WriterValidationProtocol
         {
             if (field == "admissionAfterObservation" && !report.TryGetProperty(field, out _)) continue;
             var admission = report.GetProperty(field);
+            Keys(admission, "result", "predicate");
             Need(S(admission, "result") == "ACCEPT" && admission.GetProperty("predicate").ValueKind == JsonValueKind.Null, "DIAGNOSTIC_ADMISSION_REJECTED");
         }
         var binding = report.GetProperty("binding");
+        Keys(binding, "matched", "process", "parent", "scm");
         Need(B(binding, "matched") && Equal(binding.GetProperty("process"), observation.GetProperty("process")) &&
             Equal(binding.GetProperty("parent"), observation.GetProperty("parent")) &&
             Equal(binding.GetProperty("scm"), observation.GetProperty("scm")), "DIAGNOSTIC_BINDING");
         var diagnosticToken = report.GetProperty("token");
+        Keys(diagnosticToken, "thread_token", "user", "owner", "integrity", "token_type", "elevation", "elevation_type",
+            "ui_access", "virtualization", "session_id", "has_restrictions", "group_attributes", "restricting_attributes",
+            "privilege_attributes", "token_id", "authentication_id", "modified_id", "mandatory_policy", "denyOnlyGroups");
+        Need(diagnosticToken.GetProperty("denyOnlyGroups").GetArrayLength() == 0, "DIAGNOSTIC_DENY_ONLY_CONFLICT");
         foreach (var field in new[] { "thread_token", "user", "owner", "integrity", "token_type", "elevation", "elevation_type",
             "ui_access", "virtualization", "session_id", "has_restrictions", "group_attributes", "restricting_attributes",
             "privilege_attributes", "token_id", "authentication_id", "modified_id", "mandatory_policy" })
@@ -181,63 +207,195 @@ internal sealed class WriterValidationProtocol
                 Need(stage.TryGetProperty(property.Name, out var value) && Equal(value, property.Value), "STAGE_REPORT_CONFLICT");
         }
         var a4 = assumptions.GetProperty("A4");
+        Keys(a4, "status", "actualWriterProcess", "actualWriterTokenEnvelopeComplete", "tokenUnchanged");
         Need(S(a4, "status") == "PASS" && B(a4, "actualWriterProcess") && B(a4, "actualWriterTokenEnvelopeComplete"), "A4_DIAGNOSTIC");
         var a5 = assumptions.GetProperty("A5");
+        Keys(a5, "status", "targets", "requiredDenials", "unknown", "tokenUnchanged");
         Need(N(a5, "requiredDenials") == 0, "DIAGNOSTIC_REQUIRED_DENIAL");
-        var unknown = ValidateFiles(report.GetProperty("files"));
+        bool requiredOnly = S(a5, "status") == "BLOCKED";
+        var targets = DiagnosticTargets();
+        Need(N(report, "expectedFileTargets") == targets.Count, "DIAGNOSTIC_TARGET_COUNT");
+        var unknown = ValidateFiles(report.GetProperty("files"), targets, requiredOnly);
         Need(N(a5, "unknown") == unknown && N(a5, "targets") == report.GetProperty("files").EnumerateArray()
             .Count(x => S(x, "assumption") == "A5"), "DIAGNOSTIC_FILE_COUNTS");
-        if (S(a5, "status") == "BLOCKED")
+        if (requiredOnly)
+        {
             Need(unknown > 0 && stages.Count == 2 && !B(report, "completed"), "UNEXPLAINED_A5_BLOCK");
+            // The producer returns before A6 on a missing diagnostic replica. No
+            // service or forbidden-right observation can be hidden in this exception.
+            Keys(report.GetProperty("services"));
+            Need(S(report, "step") == "REQUIRED_RIGHTS" && !report.TryGetProperty("expectedServiceTargets", out _) &&
+                !report.TryGetProperty("admissionAfterObservation", out _), "A5_TERMINAL_SHAPE");
+        }
         else
         {
-            Need(unknown == 0 && stages.Count == 3, "MISSING_A6_DIAGNOSTIC");
+            Need(S(a5, "status") == "PASS" && unknown == 0 && stages.Count == 3, "MISSING_A6_DIAGNOSTIC");
             var a6 = assumptions.GetProperty("A6");
+            Keys(a6, "status", "forbiddenGrants", "unknown", "tokenUnchanged", "completeAuthorityDomainProven", "limitation");
             Need(S(a6, "status") == "BLOCKED" && N(a6, "forbiddenGrants") == 0 && N(a6, "unknown") == 0 &&
                 !B(a6, "completeAuthorityDomainProven") && S(a6, "limitation") == "FIXED_ROOTS_AND_REPLICA_LEAVES_NOT_GLOBAL_AUTHORITY_PROOF" &&
                 B(report, "completed"), "UNEXPLAINED_A6_BLOCK");
-            var services = report.GetProperty("services").GetProperty("rows");
-            Need(services.GetArrayLength() == 7 * ServiceRights.Length, "DIAGNOSTIC_SERVICE_COUNT");
-            foreach (var row in services.EnumerateArray())
-                Need(S(row, "classification") == "SECURITY_DENIED" && !B(row, "accessGranted") &&
-                    !B(row, "apiSuccess") && N(row, "win32") == 5, "DIAGNOSTIC_SERVICE_GRANT");
+            Need(S(report, "step") == "FINAL_OWN_TOKEN_QUERY" && report.TryGetProperty("admissionAfterObservation", out _), "A6_TERMINAL_SHAPE");
+            ValidateDiagnosticServices(report);
+        }
+        var probes = report.GetProperty("files").EnumerateArray().Sum(x => x.GetProperty("rows").GetArrayLength());
+        Need(probes <= 1000 && N(report, "probeCount") == probes, "DIAGNOSTIC_PROBE_COUNT");
+    }
+
+    private void ValidateDiagnosticServices(JsonElement report)
+    {
+        var names = new[] { "Automation", "Runtime", "Writer", "Science" }.Select(role => service[..^7] + "-" + role)
+            .Concat(new[] { "MomentumHunterAutomation", "MomentumHunterContinuousRuntime", "MomentumHunterContinuousWriter" }).ToArray();
+        Need(report.GetProperty("expectedServiceTargets").EnumerateArray().Select(x => x.GetString()).SequenceEqual(names), "DIAGNOSTIC_SERVICE_TARGETS");
+        var services = report.GetProperty("services");
+        Keys(services, "rows");
+        var expected = (from name in names from right in ServiceRights select (name, (long)right)).ToHashSet();
+        var rows = services.GetProperty("rows");
+        Need(rows.GetArrayLength() == expected.Count, "DIAGNOSTIC_SERVICE_COUNT");
+        foreach (var row in rows.EnumerateArray())
+        {
+            Keys(row, "right", "apiSuccess", "win32", "accessGranted", "classification", "objectIdentity", "service", "api");
+            Need(S(row, "api") == "OpenServiceW" && expected.Remove((S(row, "service"), N(row, "right"))) &&
+                row.GetProperty("objectIdentity").ValueKind == JsonValueKind.Null, "DIAGNOSTIC_SERVICE_IDENTITY");
+            AccessRow(row, false);
         }
     }
 
-    private long ValidateFiles(JsonElement files)
+    private sealed record Target(string Name, string Path, bool Directory, long[] Needed, long[] Forbidden,
+        JsonElement FrozenIdentity, string Policy)
     {
-        Need(files.GetArrayLength() is > 0 and <= 128, "DIAGNOSTIC_FILE_BOUND");
+        internal long[] Required => Name == "ancestor" ? [] :
+            (Name.StartsWith("custody_", StringComparison.Ordinal) && Name is not ("custody_staging" or "custody_requests")
+                ? ModifyRights.Append(64) : Needed).Where(x => !Directory || x != 32).ToArray();
+    }
+    private static readonly long[] ReadRights = [1, 8, 32, 128, 131072, 1048576];
+    private static readonly long[] ModifyRights = [1, 2, 4, 8, 16, 32, 128, 256, 65536, 131072, 1048576];
+    private static readonly long[] MutationRights = [2, 4, 16, 64, 256, 65536, 262144, 524288];
+
+    // Schema-2 diagnostic recipes mirror the pinned producer. They validate its
+    // evidence inventory, and neither request rights nor replace native admission.
+    private List<Target> DiagnosticTargets()
+    {
+        var result = new List<Target>();
+        var resources = profile.GetProperty("resources").EnumerateArray().ToDictionary(x => S(x, "name"), StringComparer.Ordinal);
+        (long[], long[]) Rights(string name, bool directory, string? leaf = null)
+        {
+            var (needed, forbidden) = name switch
+            {
+                "runtime_source" or "host_image_root" or "python_root" or "python_base" or "configuration" or "writer_key" or
+                    "science_generation" or "runtime_generation" => (ReadRights, MutationRights),
+                "writer_evidence" or "writer_logs" or "writer_generation" => (ModifyRights, new long[] { 262144, 524288 }),
+                "configuration_root" or "runtime_state" or "producer_publication" or "science_derived" or
+                    "unrelated_host" or "unrelated_repository" or "unrelated_profile" or "provider_replica" or
+                    "account_replica" or "paper_replica" or "scheduler_replica" =>
+                    (new long[] { 1, 32, 128, 131072, 1048576 }, MutationRights.Append(8).ToArray()),
+                _ => throw new InvalidDataException("WRITER_PROTOCOL_UNKNOWN_RESOURCE")
+            };
+            bool meta = needed.Length == 5;
+            bool handoff = name == "science_derived" && leaf == ".custody-transport.tmp" && !directory;
+            if (handoff) (needed, forbidden) = (ReadRights, MutationRights);
+            if (!directory)
+            {
+                needed = needed.Where(x => x != 32 && (!meta || handoff || x != 1)).ToArray();
+                forbidden = forbidden.Where(x => x != 64).ToArray();
+                if (meta && !handoff) forbidden = forbidden.Concat(new long[] { 1, 32 }).ToArray();
+            }
+            return (needed, forbidden);
+        }
+        foreach (var (name, resource) in resources)
+        {
+            var (needed, forbidden) = Rights(name, B(resource, "directory"));
+            result.Add(new(name, S(resource, "path"), B(resource, "directory"), needed, forbidden,
+                resource.GetProperty("file_identity"), "016D_RESOURCE_RULES"));
+        }
+        var nil = JsonSerializer.SerializeToElement<object?>(null);
+        foreach (var name in new[] { "claims", "receipts", "arrivals", "custody", "cursors", "private", "staging", "requests" })
+        {
+            bool transport = name is "staging" or "requests";
+            result.Add(new("custody_" + name, Path.Combine(S(config.GetProperty("host"), "instanceRoot"), "science", name == "cursors" ? "reader/cursors" : name).Replace('/', '\\'), true,
+                transport ? ReadRights : new long[] { 1, 2, 4, 8, 16, 32, 64, 128, 256, 65536, 131072, 262144, 524288, 1048576 },
+                transport ? MutationRights : [], nil, "016E_TRUSTED_FINALIZER_NOT_OS_WORM"));
+        }
+        var explicitPaths = result.Select(x => x.Path).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        Need(result.Count == 30 && explicitPaths.Count == 30, "DIAGNOSTIC_RESOURCE_INVENTORY");
+        var ancestors = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var path in explicitPaths)
+            for (var parent = Path.GetDirectoryName(path); !string.IsNullOrEmpty(parent); parent = Path.GetDirectoryName(parent))
+                if (!explicitPaths.Contains(parent)) ancestors.Add(parent);
+        foreach (var parent in ancestors)
+            result.Add(new("ancestor", parent, true, [32, 128, 131072], MutationRights, nil, "016D_SUPPORT_ANCESTOR"));
+        var leaves = new List<(string, string)> {
+            ("runtime_source", "momentum_hunter/windows_writer_profile.py"), ("runtime_source", "momentum_hunter/windows_writer_self_diagnostic.py"),
+            ("runtime_source", "momentum_hunter/continuous_production.py"), ("host_image_root", "MomentumHunter.ContinuousServiceHost.exe"),
+            ("python_base", "python.exe"), ("python_root", "Scripts/python.exe") };
+        leaves.AddRange(ReplicaNames.Select(name => (name, "qualification-only.json")));
+        leaves.Add(("science_derived", ".custody-transport.tmp"));
+        foreach (var (name, leaf) in leaves)
+        {
+            var (needed, forbidden) = Rights(name, false, leaf);
+            result.Add(new(name + ":" + leaf, Path.Combine(S(resources[name], "path"), leaf).Replace('/', '\\'), false,
+                needed, forbidden, nil, "016D_EXPLICIT_LEAF"));
+        }
+        Need(result.Count is >= 30 and <= 64, "DIAGNOSTIC_TARGET_BOUND");
+        return result;
+    }
+
+    private long ValidateFiles(JsonElement files, List<Target> targets, bool requiredOnly)
+    {
+        var expected = (from target in targets from phase in (requiredOnly ? new[] { "A5" } : new[] { "A5", "A6" })
+                        where (phase == "A5" ? target.Required : target.Forbidden).Length > 0
+                        select (phase, target)).ToDictionary(x => (x.phase, x.target.Path), x => x.target);
+        Need(files.GetArrayLength() == expected.Count, "DIAGNOSTIC_FILE_INVENTORY");
         long unknown = 0;
-        var seen = new HashSet<(string, string)>();
         foreach (var file in files.EnumerateArray())
         {
+            Keys(file, "name", "path", "directory", "needed", "forbidden", "frozenIdentity", "policy", "assumption", "api", "rows", "identityBound");
             var phase = S(file, "assumption");
-            Need(phase is "A5" or "A6" && seen.Add((phase, S(file, "path"))), "DIAGNOSTIC_FILE_IDENTITY");
+            Need(expected.Remove((phase, S(file, "path")), out var target), "DIAGNOSTIC_FILE_IDENTITY");
+            Need(S(file, "name") == target!.Name && B(file, "directory") == target.Directory && S(file, "policy") == target.Policy &&
+                S(file, "api") == "CreateFileW_OPEN_EXISTING" && Equal(file.GetProperty("frozenIdentity"), target.FrozenIdentity) &&
+                file.GetProperty("needed").EnumerateArray().Select(x => x.GetInt64()).SequenceEqual(target.Needed) &&
+                file.GetProperty("forbidden").EnumerateArray().Select(x => x.GetInt64()).SequenceEqual(target.Forbidden), "DIAGNOSTIC_FILE_POLICY");
             var rows = file.GetProperty("rows");
-            Need(rows.GetArrayLength() is > 1 and <= 16 && N(rows[0], "right") == 0, "DIAGNOSTIC_RIGHTS");
+            var rights = new long[] { 0 }.Concat(phase == "A5" ? target.Required : target.Forbidden).ToArray();
+            Need(rows.GetArrayLength() == rights.Length && rows.EnumerateArray().Select(x => N(x, "right")).SequenceEqual(rights), "DIAGNOSTIC_RIGHTS");
+            foreach (var row in rows.EnumerateArray())
+                Keys(row, "right", "apiSuccess", "win32", "accessGranted", "classification", "objectIdentity", "metadataWin32");
             if (!B(file, "identityBound"))
             {
                 var resource = S(file, "name").Split(':');
                 Need(phase == "A5" && resource.Length == 2 && ReplicaNames.Contains(resource[0]) &&
                     resource[1] == "qualification-only.json", "DIAGNOSTIC_UNKNOWN_RESOURCE");
-                var matches = profile.GetProperty("resources").EnumerateArray().Where(x => S(x, "name") == resource[0]).ToArray();
-                Need(matches.Length == 1 && S(file, "path") == Path.Combine(S(matches[0], "path"), resource[1]), "DIAGNOSTIC_REPLICA_PATH");
                 foreach (var row in rows.EnumerateArray())
-                    Need(S(row, "classification") is "OBJECT_MISSING" or "PATH_MISSING" && !B(row, "accessGranted") &&
-                        !B(row, "apiSuccess") && N(row, "win32") is 2 or 3, "DIAGNOSTIC_REPLICA_FAILURE");
+                    Need(((S(row, "classification") == "OBJECT_MISSING" && N(row, "win32") == 2) ||
+                        (S(row, "classification") == "PATH_MISSING" && N(row, "win32") == 3)) && !B(row, "accessGranted") &&
+                        !B(row, "apiSuccess") && row.GetProperty("objectIdentity").ValueKind == JsonValueKind.Null &&
+                        row.GetProperty("metadataWin32").ValueKind == JsonValueKind.Null, "DIAGNOSTIC_REPLICA_FAILURE");
                 unknown++;
                 continue;
             }
+            AccessRow(rows[0], true);
+            var identity = rows[0].GetProperty("objectIdentity");
+            Keys(identity, "fileId", "attributes", "links");
+            Need(identity.GetProperty("fileId").GetArrayLength() == 3 && identity.GetProperty("fileId").EnumerateArray().All(x => x.TryGetUInt32(out _)) &&
+                N(identity, "links") > 0 && N(identity, "attributes") is >= 0 and <= uint.MaxValue && (N(identity, "attributes") & 0x400) == 0 &&
+                ((N(identity, "attributes") & 16) != 0) == target.Directory && N(rows[0], "metadataWin32") == 0 &&
+                (target.FrozenIdentity.ValueKind == JsonValueKind.Null || Equal(identity.GetProperty("fileId"), target.FrozenIdentity)), "DIAGNOSTIC_METADATA");
             foreach (var row in rows.EnumerateArray().Skip(1))
             {
                 bool granted = phase == "A5";
-                Need(S(row, "classification") == (granted ? "GRANTED" : "SECURITY_DENIED") &&
-                    B(row, "accessGranted") == granted && B(row, "apiSuccess") == granted &&
-                    N(row, "win32") == (granted ? 0 : 5), "DIAGNOSTIC_ACCESS_FAILURE");
+                AccessRow(row, granted);
+                Need(granted ? Equal(identity, row.GetProperty("objectIdentity")) && N(row, "metadataWin32") == 0 :
+                    row.GetProperty("objectIdentity").ValueKind == JsonValueKind.Null && row.GetProperty("metadataWin32").ValueKind == JsonValueKind.Null,
+                    "DIAGNOSTIC_ROW_IDENTITY");
             }
         }
         return unknown;
     }
+
+    private static void AccessRow(JsonElement row, bool granted) =>
+        Need(S(row, "classification") == (granted ? "GRANTED" : "SECURITY_DENIED") &&
+            B(row, "accessGranted") == granted && B(row, "apiSuccess") == granted && N(row, "win32") == (granted ? 0 : 5), "DIAGNOSTIC_ACCESS_FAILURE");
 
     private static Dictionary<string, long> Attributes(JsonElement value)
     {

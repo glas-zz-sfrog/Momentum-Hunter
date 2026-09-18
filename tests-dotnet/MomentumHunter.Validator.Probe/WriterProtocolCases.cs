@@ -60,6 +60,8 @@ internal static class WriterProtocolCases
         void Case(string name, byte[] stdout, byte[] stderr, bool accept)
         {
             var failure = Check(stdout, stderr);
+            File.AppendAllText(Path.Combine(root, "cases.jsonl"), JsonSerializer.Serialize(new
+                { name, expectedAccepted = accept, actualAccepted = failure is null, failure }) + "\n");
             Need((failure is null) == accept, name + ": " + failure);
             results.Add(new { name, expectedAccepted = accept, actualAccepted = failure is null, failure });
         }
@@ -94,6 +96,13 @@ internal static class WriterProtocolCases
             ("NEGATIVE_RESOURCES", x => x["resourceCount"] = -1),
             ("MISSING_OBSERVATION", x => x.AsObject().Remove("observation"))
         }) { var value = original.DeepClone(); mutate(value); Case(name, Bytes(value), originalErr, false); }
+        foreach (var component in new[] { "process", "parent", "scm" })
+        {
+            var value = original.DeepClone(); var diagnostic = report.DeepClone();
+            value["observation"]![component]!["status"] = "FAIL";
+            diagnostic["binding"]![component]!["status"] = "FAIL";
+            Case("UNKNOWN_BOUND_ACTOR_FIELD_" + component, Bytes(value), Encode(diagnostic), false);
+        }
         foreach (var (name, mutate) in new (string, Action<JsonNode>)[]
         {
             ("DIAGNOSTIC_FALSE", x => x["assumptions"]!["A5"]!["status"] = "FALSE"),
@@ -114,8 +123,82 @@ internal static class WriterProtocolCases
         Case("PROGRESS_REPORT_DISAGREEMENT", originalOut, Encoding.UTF8.GetBytes(stageConflict), false);
         var corrupt = Encoding.UTF8.GetString(originalErr).Replace("\"sha256\":\"", "\"sha256\":\"0", StringComparison.Ordinal);
         Case("BAD_DIGEST_LENGTH", originalOut, Encoding.UTF8.GetBytes(corrupt), false);
-        var large = report.DeepClone(); large["testPadding"] = new string('x', 100000);
-        Case("BOUNDED_LARGE_DIAGNOSTIC", originalOut, Encode(large), true);
+        var large = JsonNode.Parse(File.ReadAllBytes(Path.Combine(fixture, "a6-producer-report.json")))!;
+        Need(WriterValidationProtocol.Canonical(Element(large)).Length > 100000, "Large complete diagnostic required");
+        Case("BOUNDED_LARGE_A6_PRODUCER_DIAGNOSTIC", originalOut, Encode(large), true);
+        Case("EXACT_A6_PRODUCER_TRANSPORT", originalOut, File.ReadAllBytes(Path.Combine(fixture, "a6-producer-stderr.bin")), true);
+        var observational = report.DeepClone(); observational["elapsedSeconds"] = 0.125;
+        Case("PERMITTED_OBSERVATION", originalOut, Encode(observational), true);
+        var pathMissing = report.DeepClone();
+        foreach (var file in pathMissing["files"]!.AsArray().Where(n => !n!["identityBound"]!.GetValue<bool>()))
+            foreach (var row in file!["rows"]!.AsArray()) { row!["classification"] = "PATH_MISSING"; row["win32"] = 3; }
+        Case("EXPLICIT_PATH_MISSING_REPLICA_EXCEPTION", originalOut, Encode(pathMissing), true);
+
+        void Negative(string name, JsonNode basis, Action<JsonNode> mutate)
+        { var value = basis.DeepClone(); mutate(value); Case(name, originalOut, Encode(value), false); }
+        JsonObject ReviewGrant() => new() { ["service"] = "MomentumHunterContinuousWriter", ["right"] = 16,
+            ["classification"] = "GRANTED", ["accessGranted"] = true, ["apiSuccess"] = true, ["win32"] = 0 };
+        Negative("EXACT_REVIEW_A5_BLOCKED_SERVICE_GRANT", report, x =>
+            x["services"] = new JsonObject { ["rows"] = new JsonArray(ReviewGrant()) });
+        Negative("A5_WITH_DENIAL_SERVICE_ROWS", report, x => x["services"] = large["services"]!.DeepClone());
+        Negative("A5_WITH_EMPTY_SERVICE_ROWS", report, x => x["services"] = new JsonObject { ["rows"] = new JsonArray() });
+        Negative("A5_WITH_A6_FILES", report, x => x["files"]!.AsArray().Add(large["files"]!.AsArray().First(n => n!["assumption"]!.GetValue<string>() == "A6")!.DeepClone()));
+        Negative("A5_BLOCKED_WITHOUT_MISSING_OR_GRANT", large, x => x["assumptions"]!["A5"]!["status"] = "BLOCKED");
+        Negative("A5_INCOMPLETE_REQUIRED_TARGET", report, x => { x["files"]!.AsArray().RemoveAt(0); x["assumptions"]!["A5"]!["targets"] = 43; });
+        Negative("A5_DUPLICATE_TARGET", report, x => x["files"]![1] = x["files"]![0]!.DeepClone());
+        Negative("A5_MISSING_REQUIRED_RIGHT", report, x => x["files"]![0]!["rows"]!.AsArray().RemoveAt(1));
+        Negative("A5_DUPLICATE_RIGHT", report, x => x["files"]![0]!["rows"]![2] = x["files"]![0]!["rows"]![1]!.DeepClone());
+        Negative("A5_UNKNOWN_RIGHT", report, x => x["files"]![0]!["rows"]![1]!["right"] = 524288);
+        Negative("A5_POLICY_SELF_REWRITE", report, x => { x["files"]![0]!["needed"] = new JsonArray(524288); x["files"]![0]!["rows"]![1]!["right"] = 524288; });
+        Negative("A5_RESOURCE_RELABEL", report, x => x["files"]![0]!["name"] = "writer_logs");
+        Negative("A5_REFERENCE_DENIED", report, x => x["files"]![0]!["rows"]![0]!["classification"] = "SECURITY_DENIED");
+        Negative("A5_REFERENCE_REPARSE", report, x => x["files"]![0]!["rows"]![0]!["objectIdentity"]!["attributes"] = 1040);
+        Negative("A5_REFERENCE_WRONG_KIND", report, x => x["files"]![0]!["rows"]![0]!["objectIdentity"]!["attributes"] = 32);
+        Negative("A5_REFERENCE_IDENTITY_DRIFT", report, x => x["files"]![0]!["rows"]![0]!["objectIdentity"]!["fileId"]![2] = 1);
+        Negative("A5_RIGHT_IDENTITY_DRIFT", report, x => x["files"]![0]!["rows"]![1]!["objectIdentity"]!["fileId"]![2] = 1);
+        Negative("A5_MALFORMED_ROW", report, x => x["files"]![0]!["rows"]![1] = new JsonObject());
+        Negative("A5_MISSING_SERVICE_OBJECT", report, x => x.AsObject().Remove("services"));
+        Negative("A5_BAD_PROBE_COUNT", report, x => x["probeCount"] = 0);
+        Negative("A5_UNEXPECTED_A6_TERMINAL_FIELD", report, x => x["expectedServiceTargets"] = new JsonArray());
+        Negative("A5_WRONG_STEP", report, x => x["step"] = "FINAL_OWN_TOKEN_QUERY");
+        Negative("A5_MISSING_TARGET_COUNT", report, x => x.AsObject().Remove("expectedFileTargets"));
+        Negative("A5_MISSING_REQUIRED_ASSUMPTION", report, x => x["assumptions"]!.AsObject().Remove("A5"));
+        Negative("A5_NATIVE_ADMISSION_REJECTED", report, x => { x["admissionAfter"]!["result"] = "REJECT"; x["admissionAfter"]!["predicate"] = "ACTUAL_NATIVE_ADMISSION_REJECTION"; });
+        Negative("UNKNOWN_REPORT_PADDING", report, x => x["testPadding"] = new string('x', 100000));
+        Negative("UNKNOWN_NESTED_TOKEN_STATUS", report, x => x["token"]!["status"] = "FAIL");
+        Negative("PROGRESS_UNAVAILABLE", report, x => x["progressOutputUnavailable"] = true);
+        foreach (var status in new[] { "BLOCKED", "FAIL", "FALSE", "ERROR", "UNKNOWN", "PASS" })
+            Negative("UNSUPPORTED_OVERALL_" + status, report, x => x["status"] = status);
+        foreach (var status in new[] { "FAIL", "ERROR", "UNKNOWN", "NOT_APPLICABLE" })
+        {
+            Negative("A5_STATUS_" + status, report, x => x["assumptions"]!["A5"]!["status"] = status);
+            Negative("A6_STATUS_" + status, large, x => x["assumptions"]!["A6"]!["status"] = status);
+        }
+        foreach (var kind in new[] { "DENIED", "MISSING", "BLOCKED", "UNKNOWN", "NOT_APPLICABLE", "SHARING_CONFLICT", "UNKNOWN_API_CONTRADICTION" })
+        {
+            Negative("REQUIRED_ROW_" + kind, report, x => x["files"]![0]!["rows"]![1]!["classification"] = kind);
+            Negative("SERVICE_ROW_" + kind, large, x => x["services"]!["rows"]![0]!["classification"] = kind);
+        }
+        void Grant(JsonNode row) { row["classification"] = "GRANTED"; row["accessGranted"] = true; row["apiSuccess"] = true; row["win32"] = 0; }
+        Negative("A6_SERVICE_GRANT_DESPITE_ZERO_COUNTER", large, x => Grant(x["services"]!["rows"]![0]!));
+        Negative("A6_SERVICE_GRANT_STATUS_PASS", large, x => { x["assumptions"]!["A6"]!["status"] = "PASS"; Grant(x["services"]!["rows"]![0]!); });
+        Negative("A6_MISSING_SERVICE_RIGHT", large, x => x["services"]!["rows"]!.AsArray().RemoveAt(0));
+        Negative("A6_DUPLICATE_SERVICE_RIGHT", large, x => x["services"]!["rows"]![1] = x["services"]!["rows"]![0]!.DeepClone());
+        Negative("A6_UNKNOWN_SERVICE", large, x => x["services"]!["rows"]![0]!["service"] = "UnknownService");
+        Negative("A6_UNKNOWN_SERVICE_RIGHT", large, x => x["services"]!["rows"]![0]!["right"] = 1);
+        Negative("A6_SERVICE_API_CONTRADICTION", large, x => x["services"]!["rows"]![0]!["apiSuccess"] = true);
+        Negative("A6_SERVICE_ACCESS_CONTRADICTION", large, x => x["services"]!["rows"]![0]!["accessGranted"] = true);
+        Negative("A6_SERVICE_ERROR_CONTRADICTION", large, x => x["services"]!["rows"]![0]!["win32"] = 0);
+        Negative("A6_MANAGER_ERROR", large, x => x["services"]!["managerError"] = 5);
+        Negative("A6_BOUNDED_STOP", large, x => x["services"]!["boundedStop"] = true);
+        Negative("A6_TARGET_LIST_CONTRADICTION", large, x => x["expectedServiceTargets"]![0] = "UnknownService");
+        Negative("A6_MISSING_ADMISSION_AFTER_OBSERVATION", large, x => x.AsObject().Remove("admissionAfterObservation"));
+        Negative("A6_FORBIDDEN_FILE_GRANT", large, x => Grant(x["files"]!.AsArray().First(n => n!["assumption"]!.GetValue<string>() == "A6")!["rows"]![1]!));
+        Negative("A6_MISSING_FORBIDDEN_RIGHT", large, x => x["files"]!.AsArray().First(n => n!["assumption"]!.GetValue<string>() == "A6")!["rows"]!.AsArray().RemoveAt(1));
+        Negative("A6_UNKNOWN_PROBE", large, x => x["assumptions"]!["A6"]!["unknown"] = 1);
+        Negative("A6_UNEXPLAINED_BLOCK", large, x => x["assumptions"]!["A6"]!["limitation"] = "UNKNOWN");
+        Negative("A6_OVERCLAIMED_DOMAIN", large, x => x["assumptions"]!["A6"]!["completeAuthorityDomainProven"] = true);
+        Negative("A6_UNFINISHED", large, x => x["completed"] = false);
         var missing = report.DeepClone(); missing["errors"] = null;
         Case("NULL_ERRORS", originalOut, Encode(missing), false);
         foreach (var (name, value) in new[]
@@ -180,7 +263,8 @@ internal static class WriterProtocolCases
         if (mode == "malformed") { Console.Write("{"); return 0; }
         var configuration = JsonNode.Parse(File.ReadAllBytes(args[3]))!;
         var result = JsonNode.Parse(File.ReadAllBytes(Path.Combine(fixture, "002-stdout.bin")))!;
-        var report = Decode(File.ReadAllBytes(Path.Combine(fixture, "003-stderr.bin")));
+        var report = mode == "large" ? JsonNode.Parse(File.ReadAllBytes(Path.Combine(fixture, "a6-producer-report.json")))! :
+            Decode(File.ReadAllBytes(Path.Combine(fixture, "003-stderr.bin")));
         using var own = Process.GetCurrentProcess();
         using var parent = Process.GetProcessById(int.Parse(args[4]));
         var obs = result["observation"]!;
@@ -192,7 +276,6 @@ internal static class WriterProtocolCases
         foreach (var field in new[] { "process", "parent", "scm" }) report["binding"]![field] = obs[field]!.DeepClone();
         report["configurationSha256"] = Hash(configuration);
         report["profileSha256"] = Hash(configuration["host"]!["science"]!["custodyPolicy"]!["actor_profile"]!);
-        if (mode == "large") report["testPadding"] = new string('x', 100000);
         if (mode == "fail") result["status"] = "FAIL";
         var stdout = Bytes(result); var stderr = Encode(report);
         // Concurrent writes expose sequential-drain/backpressure regressions.
