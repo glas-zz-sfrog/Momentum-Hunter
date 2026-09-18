@@ -7,5 +7,6 @@
   </PropertyGroup>
   <ItemGroup>
     <Compile Include="../../src/MomentumHunter.ContinuousServiceHost/QualificationValidator.cs" Link="QualificationValidator.cs" />
+    <Compile Include="../../src/MomentumHunter.ContinuousServiceHost/WriterValidationProtocol.cs" Link="WriterValidationProtocol.cs" />
   </ItemGroup>
 </Project>

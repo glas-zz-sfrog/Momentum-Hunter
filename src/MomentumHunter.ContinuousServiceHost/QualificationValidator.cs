@@ -8,15 +8,19 @@ namespace MomentumHunter.ContinuousServiceHost;
 internal sealed record ValidatorResult(int? ExitCode, string? CancellationSource,
     long StdoutBytes, long StderrBytes, bool CleanupComplete, string? Failure)
 {
+    public bool? ProtocolAccepted { get; init; }
+    public string? ProtocolFailure { get; init; }
     public bool Accepted => ExitCode == 0 && CancellationSource is null && Failure is null
-        && CleanupComplete && StdoutBytes is > 0 and <= 65536 && StderrBytes == 0;
+        && CleanupComplete && StdoutBytes is > 0 and <= 65536 && StderrBytes is >= 0 and <= 65536
+        && ProtocolFailure is null && (ProtocolAccepted ?? (StderrBytes == 0));
 }
 
 // Diagnostics do not confer service/admission authority or change the child command.
 internal static class QualificationValidator
 {
     internal static async Task<ValidatorResult> RunAsync(ProcessStartInfo info, string root,
-        TimeSpan timeout, CancellationToken caller, int streamLimit = 65536)
+        TimeSpan timeout, CancellationToken caller, int streamLimit = 65536,
+        WriterValidationProtocol? writerProtocol = null)
     {
         if (timeout <= TimeSpan.Zero || timeout > TimeSpan.FromMinutes(2) || streamLimit is < 1 or > 1048576)
             throw new ArgumentOutOfRangeException(nameof(timeout));
@@ -48,12 +52,14 @@ internal static class QualificationValidator
         info.RedirectStandardOutput = true;
         info.RedirectStandardError = true;
         using var child = new Process { StartInfo = info };
-        using var output = new FileStream(Path.Combine(root, "stdout.bin"), FileMode.CreateNew, FileAccess.Write, FileShare.Read);
-        using var error = new FileStream(Path.Combine(root, "stderr.bin"), FileMode.CreateNew, FileAccess.Write, FileShare.Read);
+        using var output = new FileStream(Path.Combine(root, "stdout.bin"), FileMode.CreateNew, FileAccess.ReadWrite, FileShare.Read);
+        using var error = new FileStream(Path.Combine(root, "stderr.bin"), FileMode.CreateNew, FileAccess.ReadWrite, FileShare.Read);
         var interrupt = new TaskCompletionSource<string>(TaskCreationOptions.RunContinuationsAsynchronously);
         string? cancellation = null, failure = null;
         int? exit = null;
         long stdoutCount = 0, stderrCount = 0;
+        int childPid = 0;
+        long childBirth = 0;
         bool started = false, cleanup = false;
         using var stopReads = new CancellationTokenSource();
         Task<long>? stdout = null, stderr = null;
@@ -101,6 +107,8 @@ internal static class QualificationValidator
             caller.ThrowIfCancellationRequested();
             if (!child.Start()) throw new InvalidOperationException("Validator start returned false.");
             started = true;
+            childPid = child.Id;
+            childBirth = child.StartTime.ToUniversalTime().ToFileTimeUtc();
             Record("CHILD_STARTED", new { pid = child.Id, birth = child.StartTime.ToUniversalTime() });
             stdout = Drain(child.StandardOutput.BaseStream, output, "STDOUT");
             stderr = Drain(child.StandardError.BaseStream, error, "STDERR");
@@ -160,6 +168,22 @@ internal static class QualificationValidator
         output.Flush(true);
         error.Flush(true);
         var result = new ValidatorResult(exit, cancellation, stdoutCount, stderrCount, cleanup, failure);
+        if (writerProtocol is not null)
+        {
+            string? protocolFailure = "PROCESS_NOT_SUCCESSFUL";
+            try
+            {
+                if (exit == 0 && cancellation is null && failure is null && cleanup &&
+                    stdoutCount is > 0 and <= 65536 && stderrCount is > 0 and <= 65536)
+                    protocolFailure = writerProtocol.Validate(Snapshot(output), Snapshot(error), childPid, childBirth,
+                        launcher.Id, launcher.StartTime.ToUniversalTime().ToFileTimeUtc());
+            }
+            catch (Exception ex)
+            {
+                protocolFailure = "PROTOCOL_OBSERVATION_FAILURE_" + ex.GetType().Name;
+            }
+            result = result with { ProtocolAccepted = protocolFailure is null, ProtocolFailure = protocolFailure };
+        }
         Record("TERMINAL", result);
         var summary = JsonSerializer.SerializeToUtf8Bytes(new { result, result.Accepted,
             stdoutSha256 = Hash(Path.Combine(root, "stdout.bin")), stderrSha256 = Hash(Path.Combine(root, "stderr.bin")),
@@ -174,5 +198,14 @@ internal static class QualificationValidator
     {
         using var stream = File.Open(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
         return Convert.ToHexString(SHA256.HashData(stream));
+    }
+
+    private static byte[] Snapshot(FileStream stream)
+    {
+        if (stream.Length > 65536) throw new InvalidDataException("Validator output bound exceeded.");
+        stream.Position = 0;
+        var bytes = new byte[(int)stream.Length];
+        stream.ReadExactly(bytes);
+        return bytes;
     }
 }

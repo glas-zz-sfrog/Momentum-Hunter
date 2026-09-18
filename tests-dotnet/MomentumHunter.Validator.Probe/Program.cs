@@ -2,6 +2,8 @@ using System.Diagnostics;
 using System.Text.Json;
 using MomentumHunter.ContinuousServiceHost;
 
+if (args.Length > 0 && args[0] is "writer-suite" or "writer-child") return await WriterProtocolCases.Run(args);
+
 if (args.Length > 0 && args[0] == "child")
 {
     switch (args[1])
