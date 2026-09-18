@@ -288,12 +288,14 @@ public sealed class ContinuousProcessWorker(
                     "SCHWAB|FINVIZ|ALPACA|IBKR|MH_CANARY|API_KEY|API_SECRET|OAUTH|ACCESS_TOKEN|REFRESH_TOKEN",
                     System.Text.RegularExpressions.RegexOptions.IgnoreCase))
                     info.Environment.Remove(key);
+        var diagnosticOnly = options.Qualification && options.Role == "runtime";
+        if (!diagnosticOnly) info.Environment.Remove("MH_QUALIFICATION_DIAGNOSTIC_ROOT");
         using var descriptor = JsonDocument.Parse(File.ReadAllBytes(options.ConfigPath));
         var evidence = Path.Combine(descriptor.RootElement.GetProperty("logRoot").GetString()!,
             options.Role, "validator-" + Guid.NewGuid().ToString("N"));
         var writerProtocol = options.Role == "writer" ? new WriterValidationProtocol(descriptor.RootElement) : null;
         var result = await QualificationValidator.RunAsync(info, evidence, TimeSpan.FromSeconds(30), token,
-            writerProtocol: writerProtocol, diagnosticOnly: true);
+            writerProtocol: writerProtocol, diagnosticOnly: diagnosticOnly);
         if (!result.Accepted)
             throw new InvalidOperationException("Read-only host configuration validation failed; durable evidence: " + evidence);
     }

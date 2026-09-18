@@ -82,6 +82,26 @@ internal static class Program
             Require(!missing.Accepted && missing.Failure == "DIAGNOSTIC_TRACE_NOT_ARMED",
                 "missing hook fails closed");
 
+            var writerSite = Path.Combine(Path.GetDirectoryName(Path.GetDirectoryName(python))!,
+                "Lib", "site-packages");
+            var isolated = new ProcessStartInfo(python)
+            {
+                WorkingDirectory = root, UseShellExecute = false, CreateNoWindow = true,
+            };
+            foreach (var argument in new[] { "-I", "-S", "-B", "-X", "utf8", "-c",
+                "import sys;sys.path.insert(0,sys.argv[1]);sys.path.insert(0,sys.argv[2]);" +
+                "from momentum_hunter.continuous_production import main;print('WRITER_IMPORT_OK')",
+                source, writerSite })
+                isolated.ArgumentList.Add(argument);
+            isolated.Environment.Remove("MH_QUALIFICATION_DIAGNOSTIC_ROOT");
+            var writerBootstrap = await Run(root, "writer-isolated-bootstrap", isolated,
+                TimeSpan.FromSeconds(10), false);
+            Require(writerBootstrap.Accepted &&
+                File.ReadAllText(Path.Combine(root, "writer-isolated-bootstrap", "stdout.bin"))
+                    .Contains("WRITER_IMPORT_OK"), "isolated writer bootstrap remains usable");
+            Require(!File.Exists(Path.Combine(root, "writer-isolated-bootstrap", "python-stages.log")),
+                "writer bootstrap does not require diagnostic hook");
+
             var timerWatch = Stopwatch.StartNew();
             var timeout = await Run(root, "timeout", Child(python, root, source,
                 "import sitecustomize,time; sitecustomize.argus_trace('BLOCKED_CHILD'); time.sleep(5)", true),
