@@ -8,6 +8,7 @@ import json
 import os
 from pathlib import Path
 import shutil
+import subprocess
 
 
 def digest(path: Path) -> str:
@@ -39,9 +40,44 @@ def save(path: Path, value: dict[str, object]) -> None:
         os.fsync(output.fileno())
 
 
+def git(root: Path, *arguments: str) -> bytes:
+    return subprocess.run(
+        ["git", "--no-optional-locks", "-C", str(root), *arguments],
+        check=True, capture_output=True,
+    ).stdout
+
+
+def verify_frozen_source(root: Path, expected_head: str) -> str:
+    if len(expected_head) != 40 or any(ch not in "0123456789abcdefABCDEF" for ch in expected_head):
+        raise ValueError("EXPECTED_HEAD_INVALID")
+    actual = git(root, "rev-parse", "HEAD").decode("ascii").strip()
+    if actual.lower() != expected_head.lower():
+        raise ValueError("FROZEN_PRODUCT_HEAD_DRIFT")
+    if git(root, "status", "--porcelain=v1", "--untracked-files=all"):
+        raise ValueError("FROZEN_PRODUCT_WORKTREE_DIRTY")
+    return git(root, "rev-parse", "HEAD^{tree}").decode("ascii").strip()
+
+
+def copy_git_blob(root: Path, head: str, relative: Path, target: Path) -> dict[str, object]:
+    name = relative.as_posix()
+    blob = git(root, "show", f"{head}:{name}")
+    blob_id = git(root, "rev-parse", f"{head}:{name}").decode("ascii").strip()
+    target.parent.mkdir(parents=True, exist_ok=True)
+    with target.open("xb") as output:
+        output.write(blob)
+        output.flush()
+        os.fsync(output.fileno())
+    copied = hashlib.sha256(blob).hexdigest().upper()
+    if digest(target) != copied:
+        raise ValueError(f"GIT_BLOB_COPY_MISMATCH:{name}")
+    return {"commit": head, "path": name, "target": str(target),
+            "gitBlobId": blob_id, "sha256": copied, "bytes": len(blob)}
+
+
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--source-root", type=Path, required=True)
+    parser.add_argument("--expected-head", required=True)
     parser.add_argument("--destination", type=Path, required=True)
     parser.add_argument("--s09-root", type=Path, required=True)
     parser.add_argument("--product-manifest-sha256", required=True)
@@ -53,6 +89,7 @@ def main() -> None:
     if root.exists():
         raise FileExistsError(f"Qualification destination already exists: {root}")
     source_root = args.source_root.resolve(strict=True)
+    product_tree = verify_frozen_source(source_root, args.expected_head)
     old_product_path = args.s09_root / "product-successor" / "PRODUCT-MANIFEST.json"
     old_runtime_path = args.s09_root / "PYTHON-RUNTIME-COPY-IDENTITY.json"
     if digest(old_product_path) != args.product_manifest_sha256.upper():
@@ -80,7 +117,8 @@ def main() -> None:
         os.fsync(output.fileno())
     site = venv / "Lib" / "site-packages"
     hook_row = next(row for row in old_product["files"] if row["path"] == "sitecustomize.py")
-    hook = copy_bound(source_root / "sitecustomize.py", site / "sitecustomize.py")
+    hook = copy_git_blob(source_root, args.expected_head, Path("sitecustomize.py"),
+                         site / "sitecustomize.py")
     hook["previousSha256"] = hook_row["sha256"]
     tzdata_root = args.tzdata.resolve(strict=True)
     tzdata_rows = []
@@ -92,12 +130,14 @@ def main() -> None:
         relative = Path(row["path"])
         if relative.is_absolute() or ".." in relative.parts:
             raise ValueError("PRODUCT_PATH_ESCAPE")
-        copied = copy_bound(source_root / relative, product / relative)
+        copied = copy_git_blob(source_root, args.expected_head, relative, product / relative)
         copied["previousSha256"] = row["sha256"]
         product_rows.append(copied)
     save(root / "STARTUP-STAGING-MANIFEST.json", {
         "status": "STAGED_OFFLINE_NOT_PHYSICAL",
         "sourceRoot": str(source_root),
+        "productCommit": args.expected_head,
+        "productTree": product_tree,
         "s09ProductManifestSha256": digest(old_product_path),
         "s09RuntimeManifestSha256": digest(old_runtime_path),
         "runtimeRows": runtime_rows,

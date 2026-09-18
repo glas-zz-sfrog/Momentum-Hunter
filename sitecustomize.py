@@ -39,6 +39,21 @@ if TRACE_ROOT:
         faulthandler.enable(file=_stack_file, all_threads=True)
         faulthandler.dump_traceback_later(20, repeat=False, file=_stack_file)
         argus_trace("H3_DIAGNOSTIC_BOOTSTRAP_ACTIVE")
+        if os.environ.get("MH_QUALIFICATION_DIAGNOSTIC_PARENT_ACK") == "REQUIRED":
+            _ack_path = os.path.join(TRACE_ROOT, f"parent-attestation-{os.getpid()}.ok")
+            _deadline = time.monotonic() + 6
+            while time.monotonic() < _deadline:
+                try:
+                    with open(_ack_path, "r", encoding="ascii") as _ack:
+                        if _ack.read(128) == f"ARGUS_019M_PARENT_ATTESTED_V1|{os.getpid()}":
+                            argus_trace("PARENT_ATTESTATION_CONFIRMED")
+                            break
+                except FileNotFoundError:
+                    pass
+                time.sleep(0.02)
+            else:
+                argus_trace("DIAGNOSTIC_PARENT_ATTESTATION_TIMEOUT")
+                os._exit(87)
     except BaseException as exc:
         try:
             os.write(2, ("DIAGNOSTIC_BOOTSTRAP_FAILED:" + type(exc).__name__ + "\n").encode("ascii"))

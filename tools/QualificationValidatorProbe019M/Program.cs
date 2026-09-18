@@ -69,10 +69,17 @@ internal static class Program
             Require(Activation(exactPath) == "DIAGNOSTIC_ACTIVE", "real module path activates");
             _ = Event(exactPath, "H0_PARENT_ABOUT_TO_CREATE_CHILD");
             var childEvent = Event(exactPath, "H1_CHILD_PROCESS_CREATED");
-            Require(childEvent.GetProperty("detail").GetProperty("pid").GetInt32() > 0 &&
+            var childPid = childEvent.GetProperty("detail").GetProperty("pid").GetInt32();
+            Require(childPid > 0 &&
                 childEvent.GetProperty("detail").GetProperty("commandSha256").GetString()!.Length == 64 &&
                 childEvent.GetProperty("detail").GetProperty("environmentSha256").GetString()!.Length == 64,
                 "child creation identity is durably bound");
+            var actor = Event(exactPath, "DIAGNOSTIC_STAGE_ACTOR_BOUND").GetProperty("detail");
+            Require(actor.GetProperty("Pid").GetInt32() > 0 &&
+                actor.GetProperty("ImageSha256").GetString()!.Length == 64 &&
+                (actor.GetProperty("Pid").GetInt32() == childPid ||
+                 actor.GetProperty("ParentPid").GetInt32() == childPid),
+                "stage actor is the child or its direct venv descendant");
             var stageText = File.ReadAllLines(Path.Combine(exactPath, "python-stages.log"));
             var stageNames = stageText.Select(line => line.Split('|')[2]).ToArray();
             var required = new[] { "H2_PYTHON_RUNTIME_STARTED", "H3_DIAGNOSTIC_BOOTSTRAP_ACTIVE",
@@ -100,6 +107,33 @@ internal static class Program
                 wrongModule.Failure == "DIAGNOSTIC_ACTIVATION_FAILURE:H4_TARGET_MODULE_ENTRY_REACHED",
                 "wrong module cannot masquerade as target activation");
 
+            var foreignPath = Path.Combine(root, "foreign-stage-actor");
+            var foreignWriter = Task.Run(async () =>
+            {
+                while (!Directory.Exists(foreignPath)) await Task.Delay(5);
+                var stamp = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() * 1000000;
+                var payload = $"{stamp}|{Environment.ProcessId}|H2_PYTHON_RUNTIME_STARTED\n" +
+                    $"{stamp + 1}|{Environment.ProcessId}|H3_DIAGNOSTIC_BOOTSTRAP_ACTIVE\n";
+                try
+                {
+                    using var file = new FileStream(Path.Combine(foreignPath, "python-stages.log"),
+                        FileMode.CreateNew, FileAccess.Write, FileShare.ReadWrite);
+                    var bytes = System.Text.Encoding.ASCII.GetBytes(payload);
+                    file.Write(bytes);
+                    file.Flush(true);
+                }
+                catch (IOException) { }
+            });
+            var foreign = await QualificationValidator.RunAsync(
+                Child(python, source, "-S", "-B", "-c", "import time;time.sleep(15)"),
+                foreignPath, TimeSpan.FromSeconds(30), default,
+                diagnosticOnly: true, requireHandshake: true);
+            await foreignWriter;
+            Require(!foreign.Accepted && foreign.CancellationSource == "DIAGNOSTIC_ACTIVATION_FAILURE" &&
+                Activation(foreignPath) == "DIAGNOSTIC_ACTOR_UNBOUND",
+                "foreign stage actor cannot satisfy the handshake");
+            _ = Event(foreignPath, "DIAGNOSTIC_ACTOR_BINDING_FAILURE");
+
             var stalledPath = Path.Combine(root, "stalled-startup");
             var timer = Stopwatch.StartNew();
             var stalled = await QualificationValidator.RunAsync(
@@ -112,8 +146,36 @@ internal static class Program
                 "missing H2/H3 stops before the authoritative 30-second timer");
             Require(Activation(stalledPath) == "DIAGNOSTIC_NOT_ACTIVE", "stalled startup classified");
 
+            var descendantPath = Path.Combine(root, "descendant-cleanup");
+            var descendantMarker = Path.Combine(root, "descendant-pid.txt");
+            var script = "import pathlib,subprocess,sys,time;" +
+                "p=subprocess.Popen([sys.executable,'-S','-c','import time;time.sleep(20)']);" +
+                "pathlib.Path(" + JsonSerializer.Serialize(descendantMarker) + ").write_text(str(p.pid));" +
+                "time.sleep(20)";
+            var descendantResult = await QualificationValidator.RunAsync(
+                Child(python, source, "-S", "-B", "-c", script),
+                descendantPath, TimeSpan.FromSeconds(30), default,
+                diagnosticOnly: true, requireHandshake: true);
+            Require(File.Exists(descendantMarker), "test descendant was actually created");
+            var descendantPid = int.Parse(File.ReadAllText(descendantMarker));
+            var descendantExited = false;
+            try
+            {
+                using var descendant = Process.GetProcessById(descendantPid);
+                descendantExited = descendant.HasExited;
+                if (!descendantExited)
+                {
+                    descendant.Kill(entireProcessTree: true);
+                    descendant.WaitForExit(5000);
+                }
+            }
+            catch (ArgumentException) { descendantExited = true; }
+            Require(descendantResult.CancellationSource == "DIAGNOSTIC_ACTIVATION_FAILURE" &&
+                descendantResult.CleanupComplete && descendantExited,
+                "activation failure terminates the owned descendant tree");
+
             Console.WriteLine(JsonSerializer.Serialize(new { status = "PASS", root,
-                checks = 9, exactActivation = Activation(exactPath),
+                checks = 12, exactActivation = Activation(exactPath),
                 missingActivation = Activation(noSitePath),
                 stalledActivation = Activation(stalledPath),
                 stalledSeconds = timer.Elapsed.TotalSeconds,

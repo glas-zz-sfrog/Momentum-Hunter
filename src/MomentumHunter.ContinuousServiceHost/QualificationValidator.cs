@@ -32,6 +32,7 @@ internal static class QualificationValidator
         if (Directory.Exists(root) || File.Exists(root)) throw new IOException("Validator evidence already exists.");
         Directory.CreateDirectory(root);
         if (diagnosticOnly) info.Environment["MH_QUALIFICATION_DIAGNOSTIC_ROOT"] = Path.GetFullPath(root);
+        if (requireHandshake) info.Environment["MH_QUALIFICATION_DIAGNOSTIC_PARENT_ACK"] = "REQUIRED";
         var stagePath = Path.Combine(root, "python-stages.log");
         var stackPath = Path.Combine(root, "python-stacks.log");
         using var events = new FileStream(Path.Combine(root, "events.jsonl"), FileMode.CreateNew, FileAccess.Write, FileShare.Read);
@@ -87,7 +88,8 @@ internal static class QualificationValidator
         bool started = false, cleanup = false;
         using var stopReads = new CancellationTokenSource();
         Task<long>? stdout = null, stderr = null;
-        Task? activationWatch = null;
+        Task<StageActorBinding?>? activationWatch = null;
+        StageActorBinding? stageActor = null;
         void Cancel(string source)
         {
             lock (sync)
@@ -97,6 +99,9 @@ internal static class QualificationValidator
                 interrupt.TrySetResult(source);
             }
         }
+        using var timer = new CancellationTokenSource();
+        using var callerRegistration = caller.Register(() => Cancel("CALLER"));
+        using var timerRegistration = timer.Token.Register(() => Cancel("TIMER"));
         async Task<long> Drain(Stream input, FileStream sink, string name)
         {
             var buffer = new byte[4096];
@@ -130,11 +135,18 @@ internal static class QualificationValidator
         {
             // A pre-canceled caller must never launch a child.
             caller.ThrowIfCancellationRequested();
+            var executableSha256 = diagnosticOnly ? Hash(info.FileName) : null;
+            var commandSha256 = diagnosticOnly ? HashBytes(JsonSerializer.SerializeToUtf8Bytes(info.ArgumentList.ToArray())) : null;
+            var environmentSha256 = diagnosticOnly ? HashBytes(JsonSerializer.SerializeToUtf8Bytes(
+                info.Environment.OrderBy(item => item.Key, StringComparer.OrdinalIgnoreCase).ToArray())) : null;
             if (diagnosticOnly)
             {
-                Record("H0_PARENT_ABOUT_TO_CREATE_CHILD", new { executable = info.FileName });
+                Record("H0_PARENT_ABOUT_TO_CREATE_CHILD", new { executable = info.FileName,
+                    executableSha256, commandSha256, environmentSha256 });
                 Record("CHILD_CREATE_REQUEST", new { executable = info.FileName });
             }
+            caller.ThrowIfCancellationRequested();
+            timer.CancelAfter(timeout);
             if (!child.Start()) throw new InvalidOperationException("Validator start returned false.");
             started = true;
             childPid = child.Id;
@@ -142,18 +154,13 @@ internal static class QualificationValidator
             diagnosticJob?.Assign(child);
             if (diagnosticOnly)
                 Record("H1_CHILD_PROCESS_CREATED", new { pid = childPid, birth = childBirth,
-                    executable = info.FileName, executableSha256 = Hash(info.FileName),
-                    commandSha256 = HashBytes(JsonSerializer.SerializeToUtf8Bytes(info.ArgumentList.ToArray())),
-                    environmentSha256 = HashBytes(JsonSerializer.SerializeToUtf8Bytes(
-                        info.Environment.OrderBy(item => item.Key, StringComparer.OrdinalIgnoreCase).ToArray())) });
+                    executable = info.FileName, executableSha256, commandSha256, environmentSha256 });
             Record("CHILD_STARTED", new { pid = child.Id, birth = child.StartTime.ToUniversalTime() });
             stdout = Drain(child.StandardOutput.BaseStream, output, "STDOUT");
             stderr = Drain(child.StandardError.BaseStream, error, "STDERR");
             if (requireHandshake)
-                activationWatch = WatchActivationAsync(stagePath, child, interrupt.Task, Record, Cancel);
-            using (var timer = new CancellationTokenSource(timeout))
-            using (caller.Register(() => Cancel("CALLER")))
-            using (timer.Token.Register(() => Cancel("TIMER")))
+                activationWatch = WatchActivationAsync(stagePath, root, child, info.FileName,
+                    interrupt.Task, Record, Cancel);
             {
                 var exited = child.WaitForExitAsync();
                 if (diagnosticOnly) Record("PARENT_WAIT_ENTER", new { childPid, wait = "CHILD_EXIT_OR_INTERRUPT" });
@@ -227,7 +234,7 @@ internal static class QualificationValidator
             stopReads.Cancel();
             if (activationWatch is not null)
             {
-                try { await activationWatch.WaitAsync(TimeSpan.FromSeconds(6)); }
+                try { stageActor = await activationWatch.WaitAsync(TimeSpan.FromSeconds(7)); }
                 catch (Exception ex)
                 {
                     cleanup = false;
@@ -259,13 +266,16 @@ internal static class QualificationValidator
             var activation = stages.Conflict is not null ? "DIAGNOSTIC_CONFLICT" :
                 missing.Length == 0 ? "DIAGNOSTIC_ACTIVE" :
                 stages.Names.Count == 0 ? "DIAGNOSTIC_NOT_ACTIVE" : "DIAGNOSTIC_ACTIVATION_PARTIAL";
+            if (requireHandshake && stages.Names.Contains("H2_PYTHON_RUNTIME_STARTED") &&
+                stageActor is null) activation = "DIAGNOSTIC_ACTOR_UNBOUND";
             Record("DIAGNOSTIC_ACTIVATION_RESULT", new { classification = activation,
-                stagePid = stages.Pid, missing, stages.Conflict });
+                stagePid = stages.Pid, stageActor, missing, stages.Conflict });
             Record("DIAGNOSTIC_RESULT", new { stageBytes, stackExists,
                 stackBytes = stackExists ? new FileInfo(stackPath).Length : 0 });
-            if (requireHandshake && (missing.Length > 0 || stages.Conflict is not null) &&
+            if (requireHandshake && (missing.Length > 0 || stages.Conflict is not null || stageActor is null) &&
                 failure is null && cancellation is null)
-                failure = "DIAGNOSTIC_ACTIVATION_FAILURE:" + (stages.Conflict ?? missing[0]);
+                failure = "DIAGNOSTIC_ACTIVATION_FAILURE:" + (stages.Conflict ??
+                    (missing.Length > 0 ? missing[0] : "ACTOR_UNBOUND"));
             else if (exit == 0 && cancellation is null && failure is null && (stageBytes == 0 || !stackExists))
                 failure = "DIAGNOSTIC_TRACE_NOT_ARMED";
         }
@@ -311,6 +321,8 @@ internal static class QualificationValidator
     private static string HashBytes(byte[] bytes) => Convert.ToHexString(SHA256.HashData(bytes));
 
     private sealed record StageSnapshot(HashSet<string> Names, int? Pid, string? Conflict);
+    private sealed record StageActorBinding(int Pid, long Birth, int? ParentPid,
+        string Image, string ImageSha256, string ExpectedImage);
 
     private static StageSnapshot ReadStages(string path)
     {
@@ -352,7 +364,8 @@ internal static class QualificationValidator
         catch (UnauthorizedAccessException) { return new StageSnapshot(names, null, "STAGE_READ_DENIED"); }
     }
 
-    private static async Task WatchActivationAsync(string stagePath, Process child, Task interrupted,
+    private static async Task<StageActorBinding?> WatchActivationAsync(string stagePath, string root,
+        Process child, string executable, Task interrupted,
         Action<string, object> record, Action<string> cancel)
     {
         var deadline = Stopwatch.StartNew();
@@ -363,20 +376,134 @@ internal static class QualificationValidator
             {
                 record("DIAGNOSTIC_ACTIVATION_FAILURE", new { stages.Conflict });
                 cancel("DIAGNOSTIC_ACTIVATION_FAILURE");
-                return;
+                return null;
             }
             if (stages.Names.Contains("H2_PYTHON_RUNTIME_STARTED") &&
                 stages.Names.Contains("H3_DIAGNOSTIC_BOOTSTRAP_ACTIVE"))
             {
-                record("DIAGNOSTIC_BOOTSTRAP_OBSERVED", new { stagePid = stages.Pid });
-                return;
+                try
+                {
+                    if (stages.Pid is null) throw new InvalidDataException("STAGE_PID_MISSING");
+                    var binding = BindStageActor(stages.Pid.Value, child, executable);
+                    record("DIAGNOSTIC_STAGE_ACTOR_BOUND", binding);
+                    var ack = Encoding.ASCII.GetBytes("ARGUS_019M_PARENT_ATTESTED_V1|" + binding.Pid);
+                    using (var output = new FileStream(Path.Combine(root,
+                        "parent-attestation-" + binding.Pid + ".ok"), FileMode.CreateNew,
+                        FileAccess.Write, FileShare.Read))
+                    {
+                        output.Write(ack);
+                        output.Flush(true);
+                    }
+                    return binding;
+                }
+                catch (Exception ex)
+                {
+                    record("DIAGNOSTIC_ACTOR_BINDING_FAILURE", new { type = ex.GetType().Name, ex.Message,
+                        stagePid = stages.Pid, childPid = child.Id });
+                    cancel("DIAGNOSTIC_ACTIVATION_FAILURE");
+                    return null;
+                }
             }
-            if (interrupted.IsCompleted || child.HasExited) return;
+            if (interrupted.IsCompleted || child.HasExited) return null;
             await Task.Delay(50);
         }
         record("DIAGNOSTIC_ACTIVATION_FAILURE", new { reason = "H2_H3_NOT_OBSERVED_WITHIN_5_SECONDS" });
         cancel("DIAGNOSTIC_ACTIVATION_FAILURE");
+        return null;
     }
+
+    private static StageActorBinding BindStageActor(int stagePid, Process child, string executable)
+    {
+        using var actor = Process.GetProcessById(stagePid);
+        if (actor.HasExited) throw new InvalidDataException("STAGE_ACTOR_EXITED_BEFORE_BINDING");
+        var childBirth = child.StartTime.ToUniversalTime().ToFileTimeUtc();
+        var birth = actor.StartTime.ToUniversalTime().ToFileTimeUtc();
+        if (birth < childBirth) throw new InvalidDataException("STAGE_ACTOR_PREDATES_CHILD");
+        int? parentPid = stagePid == child.Id ? null : GetParentProcessId(stagePid);
+        if (stagePid != child.Id && parentPid != child.Id)
+            throw new InvalidDataException("STAGE_ACTOR_NOT_DIRECT_CHILD");
+        if (stagePid == child.Id && birth != childBirth)
+            throw new InvalidDataException("STAGE_CHILD_BIRTH_CHANGED");
+        var image = ProcessImage(actor);
+        var expected = stagePid == child.Id ? Path.GetFullPath(executable) : ExpectedVenvBase(executable);
+        if (!Path.GetFullPath(image).Equals(expected, StringComparison.OrdinalIgnoreCase))
+            throw new InvalidDataException("STAGE_ACTOR_IMAGE_MISMATCH");
+        if (actor.HasExited) throw new InvalidDataException("STAGE_ACTOR_EXITED_DURING_BINDING");
+        return new StageActorBinding(stagePid, birth, parentPid, image, Hash(image), expected);
+    }
+
+    private static string ExpectedVenvBase(string executable)
+    {
+        var scripts = Directory.GetParent(Path.GetFullPath(executable)) ??
+            throw new InvalidDataException("VENV_SCRIPTS_ROOT_MISSING");
+        if (!scripts.Name.Equals("Scripts", StringComparison.OrdinalIgnoreCase))
+            throw new InvalidDataException("VENV_SCRIPTS_ROOT_MISMATCH");
+        var venv = scripts.Parent ?? throw new InvalidDataException("VENV_ROOT_MISSING");
+        var homes = File.ReadAllLines(Path.Combine(venv.FullName, "pyvenv.cfg"))
+            .Where(line => line.StartsWith("home = ", StringComparison.OrdinalIgnoreCase)).ToArray();
+        if (homes.Length != 1) throw new InvalidDataException("VENV_HOME_AMBIGUOUS");
+        var home = Path.GetFullPath(homes[0][7..].Trim());
+        return Path.Combine(home, "python.exe");
+    }
+
+    private static string ProcessImage(Process process)
+    {
+        var image = new StringBuilder(32768);
+        uint length = (uint)image.Capacity;
+        if (!QueryFullProcessImageNameW(process.Handle, 0, image, ref length))
+            throw new Win32Exception(Marshal.GetLastWin32Error(), "STAGE_PROCESS_IMAGE_QUERY_FAILED");
+        return image.ToString();
+    }
+
+    private static int GetParentProcessId(int pid)
+    {
+        var snapshot = CreateToolhelp32Snapshot(0x00000002, 0);
+        if (snapshot == new IntPtr(-1))
+            throw new Win32Exception(Marshal.GetLastWin32Error(), "PROCESS_SNAPSHOT_FAILED");
+        try
+        {
+            var entry = new ProcessEntry32 { Size = (uint)Marshal.SizeOf<ProcessEntry32>() };
+            if (!Process32FirstW(snapshot, ref entry))
+                throw new Win32Exception(Marshal.GetLastWin32Error(), "PROCESS_SNAPSHOT_EMPTY");
+            do
+            {
+                if (entry.ProcessId == (uint)pid) return checked((int)entry.ParentProcessId);
+            } while (Process32NextW(snapshot, ref entry));
+            throw new InvalidDataException("STAGE_ACTOR_NOT_IN_PROCESS_SNAPSHOT");
+        }
+        finally { CloseHandle(snapshot); }
+    }
+
+    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
+    private struct ProcessEntry32
+    {
+        public uint Size;
+        public uint Usage;
+        public uint ProcessId;
+        public IntPtr DefaultHeapId;
+        public uint ModuleId;
+        public uint Threads;
+        public uint ParentProcessId;
+        public int BasePriority;
+        public uint Flags;
+        [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 260)] public string ExeFile;
+    }
+
+    [DllImport("kernel32.dll", SetLastError = true)]
+    private static extern IntPtr CreateToolhelp32Snapshot(uint flags, uint processId);
+
+    [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+    private static extern bool Process32FirstW(IntPtr snapshot, ref ProcessEntry32 entry);
+
+    [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+    private static extern bool Process32NextW(IntPtr snapshot, ref ProcessEntry32 entry);
+
+    [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+    private static extern bool QueryFullProcessImageNameW(IntPtr process, uint flags,
+        StringBuilder image, ref uint length);
+
+    [DllImport("kernel32.dll", SetLastError = true)]
+    private static extern bool CloseHandle(IntPtr handle);
 
     private static byte[] Snapshot(FileStream stream)
     {
