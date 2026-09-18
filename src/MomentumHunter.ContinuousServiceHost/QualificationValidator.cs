@@ -1,4 +1,6 @@
 using System.Diagnostics;
+using System.ComponentModel;
+using System.Runtime.InteropServices;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
@@ -58,6 +60,7 @@ internal static class QualificationValidator
         info.RedirectStandardOutput = true;
         info.RedirectStandardError = true;
         using var child = new Process { StartInfo = info };
+        using var diagnosticJob = diagnosticOnly && OperatingSystem.IsWindows() ? new DiagnosticChildJob() : null;
         using var output = new FileStream(Path.Combine(root, "stdout.bin"), FileMode.CreateNew, FileAccess.ReadWrite, FileShare.Read);
         using var error = new FileStream(Path.Combine(root, "stderr.bin"), FileMode.CreateNew, FileAccess.ReadWrite, FileShare.Read);
         var interrupt = new TaskCompletionSource<string>(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -116,6 +119,7 @@ internal static class QualificationValidator
             started = true;
             childPid = child.Id;
             childBirth = child.StartTime.ToUniversalTime().ToFileTimeUtc();
+            diagnosticJob?.Assign(child);
             Record("CHILD_STARTED", new { pid = child.Id, birth = child.StartTime.ToUniversalTime() });
             stdout = Drain(child.StandardOutput.BaseStream, output, "STDOUT");
             stderr = Drain(child.StandardError.BaseStream, error, "STDERR");
@@ -130,6 +134,7 @@ internal static class QualificationValidator
                 {
                     cancellation = await interrupt.Task;
                     Record("TERMINATION_REQUESTED", new { pid = child.Id, birth = child.StartTime.ToUniversalTime(), tree = true });
+                    diagnosticJob?.Terminate();
                     if (!child.HasExited) child.Kill(entireProcessTree: true);
                 }
                 await exited.WaitAsync(TimeSpan.FromSeconds(10));
@@ -148,6 +153,7 @@ internal static class QualificationValidator
                 }
                 // An inherited pipe must not hold this host forever after root exit.
                 await Task.WhenAll(stdout, stderr).WaitAsync(TimeSpan.FromSeconds(10));
+                diagnosticJob?.Terminate();
                 stdoutCount = await stdout;
                 stderrCount = await stderr;
                 if (interrupt.Task.IsCompleted) cancellation = await interrupt.Task;
@@ -167,6 +173,7 @@ internal static class QualificationValidator
             {
                 try
                 {
+                    diagnosticJob?.Terminate();
                     if (!child.HasExited) child.Kill(entireProcessTree: true);
                     await child.WaitForExitAsync().WaitAsync(TimeSpan.FromSeconds(10));
                     exit = child.ExitCode;
@@ -243,5 +250,48 @@ internal static class QualificationValidator
         var bytes = new byte[(int)stream.Length];
         stream.ReadExactly(bytes);
         return bytes;
+    }
+
+    private sealed class DiagnosticChildJob : IDisposable
+    {
+        private IntPtr _handle;
+
+        internal DiagnosticChildJob()
+        {
+            _handle = CreateJobObjectW(IntPtr.Zero, null);
+            if (_handle == IntPtr.Zero) throw new Win32Exception(Marshal.GetLastWin32Error());
+        }
+
+        internal void Assign(Process process)
+        {
+            if (!AssignProcessToJobObject(_handle, process.Handle))
+                throw new Win32Exception(Marshal.GetLastWin32Error(), "Diagnostic child job assignment failed.");
+        }
+
+        internal void Terminate()
+        {
+            if (_handle != IntPtr.Zero && !TerminateJobObject(_handle, 1))
+                throw new Win32Exception(Marshal.GetLastWin32Error(), "Diagnostic child job termination failed.");
+        }
+
+        public void Dispose()
+        {
+            if (_handle == IntPtr.Zero) return;
+            TerminateJobObject(_handle, 1);
+            CloseHandle(_handle);
+            _handle = IntPtr.Zero;
+        }
+
+        [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+        private static extern IntPtr CreateJobObjectW(IntPtr securityAttributes, string? name);
+
+        [DllImport("kernel32.dll", SetLastError = true)]
+        private static extern bool AssignProcessToJobObject(IntPtr job, IntPtr process);
+
+        [DllImport("kernel32.dll", SetLastError = true)]
+        private static extern bool TerminateJobObject(IntPtr job, uint exitCode);
+
+        [DllImport("kernel32.dll", SetLastError = true)]
+        private static extern bool CloseHandle(IntPtr handle);
     }
 }
