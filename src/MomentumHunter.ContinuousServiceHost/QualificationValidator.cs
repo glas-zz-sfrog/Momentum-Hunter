@@ -22,7 +22,8 @@ internal static class QualificationValidator
 {
     internal static async Task<ValidatorResult> RunAsync(ProcessStartInfo info, string root,
         TimeSpan timeout, CancellationToken caller, int streamLimit = 65536,
-        WriterValidationProtocol? writerProtocol = null, bool diagnosticOnly = false)
+        WriterValidationProtocol? writerProtocol = null, bool diagnosticOnly = false,
+        bool requireOuterJob = false)
     {
         if (timeout <= TimeSpan.Zero || timeout > TimeSpan.FromMinutes(2) || streamLimit is < 1 or > 1048576)
             throw new ArgumentOutOfRangeException(nameof(timeout));
@@ -44,6 +45,18 @@ internal static class QualificationValidator
             }
         }
         using var launcher = Process.GetCurrentProcess();
+        if (requireOuterJob)
+        {
+            var inJob = false;
+            var queried = OperatingSystem.IsWindows() &&
+                IsProcessInJob(launcher.Handle, IntPtr.Zero, out inJob);
+            Record("PROCESS_JOB_CHECK", new { launcherPid = launcher.Id, diagnosticOnly,
+                queried, inJob = queried && inJob });
+            if (!diagnosticOnly || !queried || !inJob)
+                throw new InvalidOperationException("Diagnostic runtime requires a preassigned process job.");
+            Record("PROCESS_JOB_PRESENT_BEFORE_CHILD_CREATE", new { launcherPid = launcher.Id,
+                exactJobIdentity = "EXTERNAL_RECORDER_ATTESTATION_REQUIRED" });
+        }
         var environment = new Dictionary<string, string?>();
         foreach (var key in new[] { "PATH", "SystemRoot", "TEMP", "TMP", "USERPROFILE", "HOME",
             "PYTHONHOME", "PYTHONPATH", "PYTHONUTF8", "PYTHONDONTWRITEBYTECODE", "MOMENTUM_HUNTER_CONTINUOUS_SERVICE_MODE",
@@ -152,7 +165,18 @@ internal static class QualificationValidator
                         stackBytes = File.Exists(stackPath) ? new FileInfo(stackPath).Length : 0 });
                 }
                 // An inherited pipe must not hold this host forever after root exit.
-                await Task.WhenAll(stdout, stderr).WaitAsync(TimeSpan.FromSeconds(10));
+                if (diagnosticOnly) Record("PIPE_DRAIN_WAIT_ENTER", new { childPid,
+                    stdoutRetainedBytes = output.Length, stderrRetainedBytes = error.Length });
+                var drained = Task.WhenAll(stdout, stderr);
+                if (diagnosticOnly && !drained.IsCompleted &&
+                    await Task.WhenAny(drained, interrupt.Task) == interrupt.Task)
+                {
+                    cancellation = await interrupt.Task;
+                    Record("PIPE_DRAIN_INTERRUPTED", new { childPid, cancellation });
+                    diagnosticJob?.Terminate();
+                }
+                await drained.WaitAsync(TimeSpan.FromSeconds(10));
+                if (diagnosticOnly) Record("PIPE_DRAIN_WAIT_EXIT", new { childPid });
                 diagnosticJob?.Terminate();
                 stdoutCount = await stdout;
                 stderrCount = await stderr;
@@ -186,11 +210,16 @@ internal static class QualificationValidator
         finally
         {
             stopReads.Cancel();
-            foreach (var streamTask in new[] { stdout, stderr })
+            var streamTasks = new[] { stdout, stderr }.Where(task => task is not null)
+                .Select(task => (Task)task!).ToArray();
+            try
             {
-                if (streamTask is null) continue;
-                try { await streamTask; }
-                catch (Exception) { cleanup = false; }
+                await Task.WhenAll(streamTasks).WaitAsync(TimeSpan.FromSeconds(10));
+            }
+            catch (Exception ex)
+            {
+                cleanup = false;
+                Record("STREAM_CLEANUP_UNPROVEN", new { type = ex.GetType().Name, ex.Message });
             }
         }
         output.Flush(true);
@@ -252,9 +281,13 @@ internal static class QualificationValidator
         return bytes;
     }
 
+    [DllImport("kernel32.dll", SetLastError = true)]
+    private static extern bool IsProcessInJob(IntPtr process, IntPtr job, out bool result);
+
     private sealed class DiagnosticChildJob : IDisposable
     {
         private IntPtr _handle;
+        private bool _terminated;
 
         internal DiagnosticChildJob()
         {
@@ -272,14 +305,14 @@ internal static class QualificationValidator
         {
             if (_handle != IntPtr.Zero && !TerminateJobObject(_handle, 1))
                 throw new Win32Exception(Marshal.GetLastWin32Error(), "Diagnostic child job termination failed.");
+            _terminated = true;
         }
 
         public void Dispose()
         {
             if (_handle == IntPtr.Zero) return;
-            TerminateJobObject(_handle, 1);
-            CloseHandle(_handle);
-            _handle = IntPtr.Zero;
+            try { if (!_terminated) Terminate(); }
+            finally { CloseHandle(_handle); _handle = IntPtr.Zero; }
         }
 
         [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
