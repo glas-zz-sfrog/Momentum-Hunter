@@ -85,6 +85,10 @@ internal static class Program
     private static async Task<int> Main(string[] args)
     {
         if (args.Length != 2) throw new ArgumentException("Expected staged Python and source root.");
+        var exerciseParentStdinContention =
+            Environment.GetEnvironmentVariable("MH_019M_TEST_PARENT_STDIN_CONTENTION") == "1";
+        var pendingParentRead = exerciseParentStdinContention ?
+            Task.Run(() => Console.In.ReadLine()) : null;
         var python = Path.GetFullPath(args[0]);
         var source = Path.GetFullPath(args[1]);
         var root = Path.Combine(Path.GetTempPath(), "mh-019m-parent-probe-" + Guid.NewGuid().ToString("N"));
@@ -99,7 +103,10 @@ internal static class Program
                 diagnosticOnly: true, requireHandshake: true);
             Require(exact.ExitCode != 0 && exact.CancellationSource is null,
                 "invalid config does not become activation failure");
+            Require(!exerciseParentStdinContention || pendingParentRead is { IsCompleted: false },
+                "parent stdin contention remains active during child validation");
             Require(Activation(exactPath) == "DIAGNOSTIC_ACTIVE", "real module path activates");
+            _ = Event(exactPath, "CHILD_STANDARD_INPUT_CLOSED");
             _ = Event(exactPath, "H0_PARENT_ABOUT_TO_CREATE_CHILD");
             var childEvent = Event(exactPath, "H1_CHILD_PROCESS_CREATED");
             var childPid = childEvent.GetProperty("detail").GetProperty("pid").GetInt32();
@@ -214,7 +221,8 @@ internal static class Program
                 "activation failure terminates the owned descendant tree");
 
             Console.WriteLine(JsonSerializer.Serialize(new { status = "PASS", root,
-                checks = 13, exactActivation = Activation(exactPath),
+                checks = 14, parentStdinContention = exerciseParentStdinContention,
+                exactActivation = Activation(exactPath),
                 missingActivation = Activation(noSitePath),
                 stalledActivation = Activation(stalledPath),
                 stalledSeconds = timer.Elapsed.TotalSeconds,

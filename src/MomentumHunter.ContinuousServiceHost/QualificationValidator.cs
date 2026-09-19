@@ -88,6 +88,7 @@ internal static class QualificationValidator
             acceptanceTimeoutSeconds = timeout.TotalSeconds });
         info.UseShellExecute = false;
         info.CreateNoWindow = true;
+        info.RedirectStandardInput = true;
         info.RedirectStandardOutput = true;
         info.RedirectStandardError = true;
         using var child = new Process { StartInfo = info };
@@ -165,9 +166,12 @@ internal static class QualificationValidator
             timer.CancelAfter(timeout);
             if (!child.Start()) throw new InvalidOperationException("Validator start returned false.");
             started = true;
+            child.StandardInput.Close();
             childPid = child.Id;
             childBirth = child.StartTime.ToUniversalTime().ToFileTimeUtc();
             diagnosticJob?.Assign(child);
+            if (diagnosticOnly) Record("CHILD_STANDARD_INPUT_CLOSED", new {
+                pid = childPid, policy = "DEDICATED_EOF_PIPE" });
             if (diagnosticOnly)
                 Record("H1_CHILD_PROCESS_CREATED", new { pid = childPid, birth = childBirth,
                     executable = info.FileName, executableSha256, commandSha256, environmentSha256 });
