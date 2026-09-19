@@ -128,6 +128,7 @@ public sealed class ContinuousProcessWorker(
     private HostProcessGeneration? _generation;
     private int _lastExitCode;
     private DirectScienceImage? _writerImage;
+    private DirectScienceImage? _runtimeImage;
     private static readonly TimeSpan[] RestartDelays =
     {
         TimeSpan.FromSeconds(5),
@@ -139,9 +140,11 @@ public sealed class ContinuousProcessWorker(
     {
         if (options.Role == "science") throw new InvalidOperationException("Science requires the direct SCM service host.");
         using var writerImage = OperatingSystem.IsWindows() ? OpenWriterImage() : null;
+        using var runtimeImage = OperatingSystem.IsWindows() ? OpenRuntimeImage() : null;
         if (!OperatingSystem.IsWindows() && options.Qualification && options.Role == "writer")
             throw new PlatformNotSupportedException("SCM Writer requires Windows.");
         _writerImage = writerImage;
+        _runtimeImage = runtimeImage;
         if (options.Qualification && options.Role == "writer")
             await ValidateQualificationAsync(stoppingToken);
         logger.LogInformation(
@@ -193,7 +196,7 @@ public sealed class ContinuousProcessWorker(
         }
     }
 
-    private async Task RunChildOnceAsync(CancellationToken stoppingToken)
+    private ProcessStartInfo CreateChildStartInfo()
     {
         var info = new ProcessStartInfo
         {
@@ -231,6 +234,14 @@ public sealed class ContinuousProcessWorker(
         info.Environment.Remove("ALPACA_API_KEY");
         info.Environment.Remove("ALPACA_SECRET_KEY");
         if (OperatingSystem.IsWindows() && _writerImage is not null) BindWriterInterpreter(info);
+        if (OperatingSystem.IsWindows() && _runtimeImage is not null)
+        {
+            info.FileName = _runtimeImage.Resolve("python-base/python.exe");
+            BindPinnedInterpreter(info, _runtimeImage, "Runtime");
+            info.Environment.Remove("MH_QUALIFICATION_DIAGNOSTIC_ROOT");
+            info.Environment.Remove("MH_QUALIFICATION_DIAGNOSTIC_PIPE");
+            info.Environment.Remove("MH_QUALIFICATION_DIAGNOSTIC_PARENT_ACK");
+        }
         if (options.Qualification)
         {
             foreach (var key in info.Environment.Keys.ToArray())
@@ -239,11 +250,18 @@ public sealed class ContinuousProcessWorker(
                     System.Text.RegularExpressions.RegexOptions.IgnoreCase))
                     info.Environment.Remove(key);
         }
+        return info;
+    }
 
+    private async Task RunChildOnceAsync(CancellationToken stoppingToken)
+    {
+        var info = CreateChildStartInfo();
+        var childStarted = false;
         try
         {
             _process = new Process { StartInfo = info, EnableRaisingEvents = true };
             if (!_process.Start()) throw new InvalidOperationException("Continuous child failed to start.");
+            childStarted = true;
             var output = _process.StandardOutput;
             var error = _process.StandardError;
             _generation?.Started(_process);
@@ -265,6 +283,13 @@ public sealed class ContinuousProcessWorker(
         }
         finally
         {
+            // Keep the Runtime image leased even if generation publication fails
+            // after Start: the directly owned process must exit before release.
+            if (_runtimeImage is not null && childStarted && _process is { HasExited: false })
+            {
+                StopChildTree();
+                await WaitChildAsync();
+            }
             _process?.Dispose();
             _process = null;
         }
@@ -272,7 +297,7 @@ public sealed class ContinuousProcessWorker(
 
     private Task WaitChildAsync(CancellationToken token = default) => _process!.WaitForExitAsync(token);
 
-    private async Task ValidateQualificationAsync(CancellationToken token)
+    private ProcessStartInfo CreateQualificationStartInfo()
     {
         var info = new ProcessStartInfo(options.PythonExecutable)
         {
@@ -294,6 +319,13 @@ public sealed class ContinuousProcessWorker(
             info.Environment.Remove("MH_QUALIFICATION_DIAGNOSTIC_ROOT");
             info.Environment.Remove("MH_QUALIFICATION_DIAGNOSTIC_PIPE");
         }
+        return info;
+    }
+
+    private async Task ValidateQualificationAsync(CancellationToken token)
+    {
+        var info = CreateQualificationStartInfo();
+        var diagnosticOnly = options.Qualification && options.Role == "runtime";
         using var descriptor = JsonDocument.Parse(File.ReadAllBytes(options.ConfigPath));
         var evidence = Path.Combine(descriptor.RootElement.GetProperty("logRoot").GetString()!,
             options.Role, "validator-" + Guid.NewGuid().ToString("N"));
@@ -329,16 +361,42 @@ public sealed class ContinuousProcessWorker(
     }
 
     [System.Runtime.Versioning.SupportedOSPlatform("windows")]
+    private DirectScienceImage? OpenRuntimeImage()
+    {
+        if (!options.Qualification || !options.ConsoleControl || options.Role != "runtime") return null;
+        var config = System.Text.Json.Nodes.JsonNode.Parse(File.ReadAllBytes(options.ConfigPath))!.AsObject();
+        if (config["schemaVersion"]?.GetValue<int>() != 2 ||
+            config["inputMode"]?.GetValue<string>() != "OFFLINE_QUALIFICATION")
+            throw new InvalidDataException("Direct Runtime requires offline console qualification.");
+        var image = new DirectScienceImage(options, config);
+        try
+        {
+            if (!Path.GetFullPath(options.PythonExecutable).Equals(image.Resolve("python/Scripts/python.exe"),
+                StringComparison.OrdinalIgnoreCase))
+                throw new InvalidDataException("Runtime validator requires the pinned staged venv interpreter.");
+            if (!image.Manifest["files"]!.AsArray().Any(item => string.Equals(
+                item!["path"]!.GetValue<string>(), "python-base/python.exe", StringComparison.OrdinalIgnoreCase)))
+                throw new InvalidDataException("RUNTIME_DIRECT_INTERPRETER_UNBOUND");
+            return image;
+        }
+        catch { image.Dispose(); throw; }
+    }
+
+    [System.Runtime.Versioning.SupportedOSPlatform("windows")]
     private void BindWriterInterpreter(ProcessStartInfo info)
+        => BindPinnedInterpreter(info, _writerImage!, "Writer");
+
+    [System.Runtime.Versioning.SupportedOSPlatform("windows")]
+    private static void BindPinnedInterpreter(ProcessStartInfo info, DirectScienceImage image, string role)
     {
         // The Windows venv redirector is a second process. Direct base CPython
-        // keeps the real Writer PID bound to its existing SCM host generation.
+        // keeps the actual worker PID bound to its unchanged host generation.
         var arguments = info.ArgumentList.ToArray();
         if (arguments.Length < 3 || arguments[0] != "-B" || arguments[1] != "-m" ||
             arguments[2] != "momentum_hunter.continuous_production")
-            throw new InvalidDataException("Writer launch arguments changed.");
-        var paths = _writerImage!.Manifest["pythonPaths"]!.AsArray()
-            .Select(p => _writerImage.Resolve(p!.GetValue<string>())).ToArray();
+            throw new InvalidDataException($"{role} launch arguments changed.");
+        var paths = image.Manifest["pythonPaths"]!.AsArray()
+            .Select(p => image.Resolve(p!.GetValue<string>())).ToArray();
         var encoded = JsonSerializer.Serialize(JsonSerializer.Serialize(paths));
         var code = "import sys,json;sys.path[:]=json.loads(" + encoded +
             ");from momentum_hunter.continuous_production import main;raise SystemExit(main())";
