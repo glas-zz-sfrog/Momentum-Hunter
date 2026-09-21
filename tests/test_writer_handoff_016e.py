@@ -78,7 +78,8 @@ class HandoffAcquisitionTests(unittest.TestCase):
         p = policy()
         native = NativeDouble(p)
         backend = custody.WindowsScienceCustodyBackend.__new__(custody.WindowsScienceCustodyBackend)
-        backend.policy = SimpleNamespace(actor_profile=object(), root=p.root)
+        # These adversarial snapshots exercise the explicit legacy policy.
+        backend.policy = SimpleNamespace(actor_profile=object(), root=p.root, version=p.version)
         backend.role = 'writer'
         backend.max_artifact_bytes, backend.max_request_bytes = 4096, 2048
         backend._native = native
