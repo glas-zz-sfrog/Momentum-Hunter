@@ -68,7 +68,21 @@ Science-derived children. No additional Writer token authority is granted.
 Host and Writer diagnostic paths are version-aware. V2 class-parent Writer
 checks use the qualified metadata rights, not v1's broader EA-read request.
 Python and compiled protocol inventories must agree; the fixed bound remains
-64 targets / 1000 probes. The v2 test inventory has 55 targets, v1 has 52.
+64 targets / 1000 probes. The v2 pre-generation inventory has 54 targets, v1
+has 52. Pre-generation qualification does not claim access proof for a child
+that restricted Science has not created yet. All required existing targets
+remain fail-closed; the compiler's missing-replica exception is unchanged.
+
+The fresh-root defect found by independent Review 01 is preserved externally.
+The explicit second phase, `collect_b_reader_witness`, requires an admitted
+current-generation native Writer backend and a real Product-created Reader
+child. It retains the exact object, verifies native class security, probes each
+required/forbidden right, rechecks object/parent/actor identity, and returns
+phase/policy/generation-bound evidence only after success. It creates no child
+and treats missing/incompatible/replaced objects or stale actors as failures.
+The physical owner must bind this witness to the actual Science-creation
+receipt and withhold the B physical PASS and A14 until both are complete.
+Neither the standalone witness nor startup claims complete host authority.
 
 ## Qualification Map
 

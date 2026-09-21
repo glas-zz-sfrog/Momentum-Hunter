@@ -338,7 +338,9 @@ internal sealed class WriterValidationProtocol
             ("runtime_source", "momentum_hunter/continuous_production.py"), ("host_image_root", "MomentumHunter.ContinuousServiceHost.exe"),
             ("python_base", "python.exe"), ("python_root", "Scripts/python.exe") };
         leaves.AddRange(ReplicaNames.Select(name => (name, "qualification-only.json")));
-        leaves.Add(("science_derived", isB ? ".reader.lock" : ".custody-transport.tmp"));
+        // B mutable children do not exist until restricted Science creates them.
+        // Their separate post-creation witness is not a startup admission claim.
+        if (!isB) leaves.Add(("science_derived", ".custody-transport.tmp"));
         foreach (var (name, leaf) in leaves)
         {
             var (needed, forbidden) = Rights(name, false, leaf);

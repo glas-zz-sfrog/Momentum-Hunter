@@ -143,7 +143,10 @@ def targets(config, profile):
     leaves.extend((name, "qualification-only.json") for name in (
         "unrelated_host", "unrelated_repository", "unrelated_profile", "provider_replica",
         "account_replica", "paper_replica", "scheduler_replica"))
-    leaves.append(("science_derived", ".reader.lock" if is_b else ".custody-transport.tmp"))
+    # B setup creates parents only. The actual restricted Science child is
+    # qualified separately after creation, never assumed present at startup.
+    if not is_b:
+        leaves.append(("science_derived", ".custody-transport.tmp"))
     for name, relative in leaves:
         needed, forbidden = profile_api.resource_rights(name, False, relative)
         result.append(dict(name=name + ":" + relative, path=str(paths[name] / relative), directory=False,
@@ -151,6 +154,47 @@ def targets(config, profile):
     if not 30 <= len(result) <= MAX_TARGETS or len(explicit) != (32 if is_b else 30):
         raise ValueError("TARGET_INVENTORY_BOUND")
     return result
+
+
+def collect_b_reader_witness(backend):
+    """Post-creation qualification only; startup is not complete child proof.
+
+    The caller must withhold physical acceptance until this current-generation
+    Writer witness succeeds. No absent-object exception or provisioning path.
+    """
+    from momentum_hunter import science_mutable_policy as mutable
+    from momentum_hunter.windows_science_custody import WindowsScienceCustodyBackend
+    profile_api.require(type(backend) is WindowsScienceCustodyBackend
+                        and backend.role == "writer" and backend.policy.version == mutable.VERSION,
+                        "B child witness requires the admitted native Writer backend.")
+    path = backend.derived_root / ".reader.lock"
+    with backend.transaction():
+        native = backend._native
+        handle = native.open(path, access=mutable.PARENT_ACCESS, share=3)
+        try:
+            security = backend._validate_handle(handle, path, kind="derived", directory=False)
+            identity = native.identity(handle)
+            needed, forbidden = profile_api.resource_rights("science_derived", False, ".reader.lock")
+            target = dict(name="science_derived:.reader.lock", path=str(path), directory=False,
+                          needed=needed, forbidden=forbidden, frozenIdentity=identity,
+                          policy="020G_POST_SCIENCE_CREATION_CHILD")
+            report = dict(phase="POST_SCIENCE_CHILD_CREATION", policySha256=backend.policy_sha256,
+                          admissionIdentity=profile_api.admission_identity(backend._admission),
+                          path=str(path), fileIdentity=identity, descriptorSha256=security.digest,
+                          files=[], probeCount=0)
+            api = SelfNative(native)
+            deadline = time.monotonic() + MAX_SECONDS
+            for phase, required in (("A5", True), ("A6", False)):
+                matrix = file_matrix(api, [target], phase, report, deadline, time.monotonic)
+                profile_api.require(matrix_status(matrix, required) == ("PASS", 0, 0),
+                                    "B child witness is missing, incompatible or has unproven rights.")
+            profile_api.require(native.identity(handle) == identity
+                                and backend._validate_handle(handle, path, kind="derived", directory=False) == security,
+                                "B child witness object changed during observation.")
+            backend._check_pins()
+            return {**report, "status": "PASS", "scope": "CURRENT_GENERATION_EXACT_READER_CHILD_ONLY"}
+        finally:
+            handle.close()
 
 
 class SelfNative:

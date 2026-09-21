@@ -289,6 +289,64 @@ class BackendTests(unittest.TestCase):
                 value.open_reader_lock()
         self.assertTrue(self.n.handles[max(self.n.handles)].closed)
 
+    def writer_witness(self, writer, *, mutate=None, grant=None):
+        from momentum_hunter import windows_writer_self_diagnostic as diag
+        owner = self
+        class ObservedFile:
+            def __init__(self, native):
+                pass
+            def file(self, target, right):
+                if mutate:
+                    mutate(target, right)
+                obj = owner.n.objects[mod._path_key(target["path"])]
+                allowed = right not in target["forbidden"] or right == grant
+                return {**diag.row(right, allowed, 0 if allowed else 5,
+                    dict(fileId=obj.identity, attributes=obj.attributes, links=obj.links) if allowed else None),
+                    "metadataWin32": 0 if allowed else None}
+        with patch.object(diag, "SelfNative", ObservedFile), patch.object(actors, "admission_identity", side_effect=lambda x: x):
+            return diag.collect_b_reader_witness(writer)
+
+    def test_writer_first_then_actual_product_science_creation_then_child_witness(self):
+        self.n.role = "writer"
+        writer = mod.WindowsScienceCustodyBackend(self.p, role="writer")
+        self.addCleanup(writer.close)
+        with self.assertRaises(OSError):
+            self.writer_witness(writer)
+        self.assertNotIn(mod._path_key(writer.derived_root / ".reader.lock"), self.n.objects)
+        self.n.role = "science"
+        science = self.backend()
+        self.n.role = "writer"
+        result = self.writer_witness(writer)
+        self.assertEqual(result["status"], "PASS")
+        self.assertEqual(result["phase"], "POST_SCIENCE_CHILD_CREATION")
+        self.assertEqual(result["policySha256"], self.p.policy_sha256)
+        self.assertEqual(result["admissionIdentity"], writer._admission)
+        self.assertEqual(len(result["files"]), 2)
+        self.assertTrue(all(row["classification"] == "SECURITY_DENIED" for row in result["files"][1]["rows"][1:]))
+        self.assertEqual(self.n.mkdirs[-1][0].name, "sessions")
+
+    def test_child_witness_rejects_incompatible_replaced_stale_and_forbidden_grant(self):
+        science = self.backend()
+        self.n.role = "writer"
+        writer = mod.WindowsScienceCustodyBackend(self.p, role="writer")
+        self.addCleanup(writer.close)
+        obj = self.n.objects[mod._path_key(science.derived_root / ".reader.lock")]
+        before = obj.security
+        obj.security = replace(before, protected=True)
+        with self.assertRaises(mod.ScienceCustodyNativeError):
+            self.writer_witness(writer)
+        obj.security = before
+        with self.assertRaises(actors.WriterProfileError):
+            self.writer_witness(writer, grant=2)
+        with self.assertRaises(actors.WriterProfileError):
+            self.writer_witness(writer, mutate=lambda _, right: setattr(obj, "identity", (1, 0, 999)) if right == 128 else None)
+        changed = token("writer")
+        changed["token_id"] = (99, 99)
+        self.n.token_override = changed
+        with self.assertRaisesRegex(mod.ScienceCustodyNativeError, "generation changed"):
+            self.writer_witness(writer)
+        self.assertTrue(writer._closed)
+
     def test_b_finalizer_durability_lost_reply_recovery_and_policy_mismatch(self):
         from momentum_hunter.science_custody_commit import (
             ScienceCustodyFinalizer, CustodyCommitRequest, CustodyCommitError, identity_for_artifact,
@@ -366,10 +424,29 @@ class PolicyTests(unittest.TestCase):
             self.assertEqual(row["path"], b.namespace_path(cfg["host"]["science"]["stateRoot"], name))
             self.assertEqual(diag.required_rights(row), (1, 128, 131072, 1048576))
             self.assertIn(8, row["forbidden"])
-        leaf = next(x for x in rows if x["name"] == "science_derived:.reader.lock")
-        self.assertNotIn(1, leaf["needed"])
-        self.assertIn(1, leaf["forbidden"])
+        self.assertFalse(any(x["name"] == "science_derived:.reader.lock" for x in rows))
         self.assertFalse(any(".custody-transport.tmp" in row["name"] for row in rows))
+
+    def test_fresh_parents_writer_pre_generation_does_not_require_future_science_child(self):
+        from types import SimpleNamespace
+        from tests.test_writer_admission_contract_017a import configuration, actual_token
+        from tests.test_writer_self_authority_016j import SyntheticApi
+        from momentum_hunter import windows_writer_self_diagnostic as diag
+        cfg, profile = configuration()
+        cfg["host"]["science"]["custodyPolicy"] = {"version": 2}
+        paths = actors.expected_resource_paths(cfg)
+        profile = replace(profile, resources=tuple(replace(r, path=str(paths[r.name])) for r in profile.resources))
+        class FreshParents(SyntheticApi):
+            def file(self, target, right):
+                if target["name"] == "science_derived:.reader.lock":
+                    return {**diag.row(right, False, 2), "metadataWin32": None}
+                return super().file(target, right)
+        observed = actual_token()
+        with patch.object(diag, "SelfNative", FreshParents), patch.object(diag.sys, "stderr", io.StringIO()):
+            report = diag.collect(SimpleNamespace(observed=observed), cfg, profile, observed, clock=lambda: 1)
+        self.assertEqual(report["assumptions"]["A5"]["status"], "PASS")
+        self.assertTrue(report["completed"])
+        self.assertEqual(report["assumptions"]["A5"]["unknown"], 0)
 
     def test_masks_are_exact_and_distinct(self):
         self.assertEqual((b.OWNER_LEASE_ACCESS, b.READER_LOCK_ACCESS, b.TRANSPORT_ACCESS, b.RECOVERY_ACCESS),

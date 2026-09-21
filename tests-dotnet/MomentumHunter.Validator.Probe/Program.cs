@@ -3,6 +3,24 @@ using System.Text.Json;
 using MomentumHunter.ContinuousServiceHost;
 
 if (args.Length > 0 && args[0] is "writer-suite" or "writer-child") return await WriterProtocolCases.Run(args);
+if (args.Length == 3 && args[0] == "custody-file-matrix")
+{
+    using var config = JsonDocument.Parse(File.ReadAllBytes(args[1]));
+    using var cases = JsonDocument.Parse(File.ReadAllBytes(args[2]));
+    var protocol = new WriterValidationProtocol(config.RootElement);
+    var flags = System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic;
+    var targets = typeof(WriterValidationProtocol).GetMethod("DiagnosticTargets", flags)!.Invoke(protocol, null)!;
+    var validate = typeof(WriterValidationProtocol).GetMethod("ValidateFiles", flags)!;
+    foreach (var item in cases.RootElement.EnumerateArray())
+    {
+        bool accepted;
+        try { validate.Invoke(protocol, [item.GetProperty("files"), targets, item.GetProperty("requiredOnly").GetBoolean()]); accepted = true; }
+        catch (System.Reflection.TargetInvocationException ex) when (ex.InnerException is InvalidDataException) { accepted = false; }
+        if (accepted != item.GetProperty("accepted").GetBoolean()) throw new Exception("MATRIX_RESULT:" + item.GetProperty("name").GetString());
+    }
+    Console.WriteLine("020G_COMPILED_FILE_MATRIX=PASS; CASES=" + cases.RootElement.GetArrayLength());
+    return 0;
+}
 if (args.Length == 3 && args[0] == "custody-targets")
 {
     using var config = JsonDocument.Parse(File.ReadAllBytes(args[1]));
