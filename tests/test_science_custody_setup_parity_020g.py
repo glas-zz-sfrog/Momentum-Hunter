@@ -77,7 +77,7 @@ class SetupNative:
 
     def granted_access(self, h):
         self.hook("granted_access", h)
-        return h.access
+        return h.access | 0x100000
 
     def information(self, h):
         self.hook("information", h)
@@ -245,6 +245,80 @@ class SetupParityTests(unittest.TestCase):
             with self.assertRaisesRegex(n.ScienceCustodyNativeError, "setup handle authority"):
                 self.run_setup()
             self.assert_closed_failed()
+
+    def test_sealed_arm_b_requested_and_granted_rights_remain_distinct(self):
+        self.run_setup()
+        rows = [r for r in self.receipts if r["stage"] == "HANDLE" and r["requested"] == 0xE0080]
+        self.assertEqual(len(rows), 6)
+        self.assertTrue(all(r["granted"] == r["expectedGranted"] == 0x1E0080 and r["flags"] == 0 for r in rows))
+
+    def test_unaccounted_grants_and_flags_fail_without_assignment(self):
+        for grant, flags in ((0xE0080, 0), (0x1E0081, 0), (0x1F0080, 0),
+                             (0x1E0080, 1), (0x1E0080, 2), (0x1E0080, 4)):
+            with self.subTest(grant=grant, flags=flags):
+                self.setUp()
+                self.native.granted_access = lambda h: grant if h.access == s.SETUP_ACCESS else h.access
+                self.native.handle_flags = lambda h: flags if h.access == s.SETUP_ACCESS else 0
+                with self.assertRaisesRegex(n.ScienceCustodyNativeError, "setup handle authority"):
+                    self.run_setup()
+                self.assertFalse(any(x[0] == "apply" for x in self.native.actions))
+                self.assert_closed_failed()
+
+    def test_early_retained_handle_failures_inspected_before_closure(self):
+        for point in ("granted_access", "handle_flags", "HANDLE"):
+            with self.subTest(point=point):
+                self.setUp()
+                inspected = []
+                def hook(stage, handle):
+                    if handle is None or getattr(handle, "access", None) != s.SETUP_ACCESS:
+                        return
+                    if stage in ("identity", "descriptor"):
+                        inspected.append((stage, not handle.closed))
+                    if stage == point:
+                        raise OSError(point)
+                self.native.hook = hook
+                def record(row):
+                    if row["stage"] == point and row.get("requested") == s.SETUP_ACCESS:
+                        raise OSError(point)
+                    self.receipts.append(row)
+                with patch.object(s, "_SetupNative", return_value=self.native):
+                    with self.assertRaises(OSError):
+                        s.provision_mutable_parents(ROOT, SCIENCE, approved_ancestry=self.native.approved, record=record)
+                self.assertEqual(set(inspected), {("identity", True), ("descriptor", True)})
+                failure = next(r for r in self.receipts if r["stage"] == "FAILURE")
+                self.assertIsNotNone(failure["objectIdentity"])
+                self.assertEqual(failure["failureInspection"]["unavailable"], {})
+                self.assertEqual(self.receipts[-1]["ownedObjects"][0]["identity"], failure["objectIdentity"])
+                self.assert_closed_failed()
+
+    def test_failed_queries_are_independent_and_explicitly_unavailable(self):
+        for point, missing in (("identity", "identity"), ("security", "descriptor"), ("descriptor", "descriptorBytes")):
+            with self.subTest(point=point):
+                self.setUp()
+                def hook(stage, handle):
+                    if handle is not None and getattr(handle, "access", None) == s.SETUP_ACCESS and stage in {"granted_access", point}:
+                        raise OSError(stage)
+                self.native.hook = hook
+                with self.assertRaises(OSError):
+                    self.run_setup()
+                failure = next(r for r in self.receipts if r["stage"] == "FAILURE")["failureInspection"]
+                self.assertEqual(set(failure["unavailable"]), {missing})
+                self.assertEqual(failure["objectIdentity"] is None, point == "identity")
+                self.assertEqual(failure["actualDescriptor"] is None, point == "security")
+                self.assertEqual(failure["binarySdHex"] is None, point == "descriptor")
+                self.assert_closed_failed()
+
+    def test_missing_handle_does_not_infer_owned_identity_from_path(self):
+        def fail(stage, value):
+            if stage == "open" and n._path_key(value) == n._path_key(b.namespace_path(ROOT, b.COMMON)):
+                raise OSError("open")
+        self.native.hook = fail
+        with self.assertRaises(OSError):
+            self.run_setup()
+        failure = next(r for r in self.receipts if r["stage"] == "FAILURE")["failureInspection"]
+        self.assertTrue(all(v["reason"] == "NO_RETAINED_HANDLE" for v in failure["unavailable"].values()))
+        self.assertIsNone(self.receipts[-1]["ownedObjects"][0]["identity"])
+        self.assert_closed_failed()
 
     def test_untrusted_intermediate_grant_rejected_before_create(self):
         self.native.default += ((0, 3, 0x1F01FF, SCIENCE),)

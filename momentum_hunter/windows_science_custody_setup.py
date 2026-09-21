@@ -20,6 +20,7 @@ from momentum_hunter.windows_science_custody import (
 )
 
 SETUP_ACCESS = 0xE0080
+SYNCHRONIZE = 0x100000
 SET_SECURITY_INFORMATION = 0x80000017
 KINDS = (mutable.COMMON, "owner", "derived", "scratch", "staging", "requests")
 MUTATION = 0xD0156 | 0x50000000  # Native mutations plus generic write/all.
@@ -177,7 +178,7 @@ def provision_mutable_parents(state_root: str, science_sid: str, *,
              "Setup requires approved ancestry and a durable evidence sink.")
     native = _SetupNative()
     pinned, handles, created, closure = [], [], [], []
-    before = kind = current = current_identity = None
+    before = kind = current = current_identity = current_owned = None
     succeeded = False
 
     def inspect(handle, path):
@@ -187,13 +188,21 @@ def provision_mutable_parents(state_root: str, science_sid: str, *,
         native.require_path(handle, path)
         return native.security(handle), native.identity(handle)
 
-    def retain(path, access):
+    def retain(path, access, *, active_parent=False):
+        nonlocal current
         handle = native.open(path, directory=True, access=access, share=3)
         handles.append(handle)
+        if active_parent:
+            current = handle
         granted, flags = native.granted_access(handle), native.handle_flags(handle)
+        # The sealed Arm-B synchronous handle granted SYNCHRONIZE in addition
+        # to the requested 0xE0080. No other grant or handle flag is accepted.
+        expected_granted = access | SYNCHRONIZE
         record(dict(stage="HANDLE", path=str(path), requested=access, granted=granted,
-                    flags=flags, share=3, disposition=3, createFlags=0x02200000))
-        _require(granted == access and not flags & 1, "Unexpected/inheritable setup handle authority.")
+                    expectedGranted=expected_granted, flags=flags, share=3,
+                    disposition=3, createFlags=0x02200000))
+        _require(granted == expected_granted and flags == 0,
+                 "Unexpected/inheritable setup handle authority.")
         return handle
 
     def observation(handle, stage):
@@ -213,6 +222,36 @@ def provision_mutable_parents(state_root: str, science_sid: str, *,
             _require(identity == bound.file_identity and sec.digest == bound.descriptor_sha256,
                      "Setup parent changed during provisioning.")
         _require(native.token() == before, "Setup actor/privilege drift.")
+
+    def failure_inspection():
+        unavailable = {}
+        def attempt(name, read):
+            if current is None:
+                unavailable[name] = dict(reason="NO_RETAINED_HANDLE")
+                return None
+            try:
+                return read()
+            except BaseException as error:
+                unavailable[name] = dict(type=type(error).__name__, message=str(error))
+                return None
+        # Failure of one query must not suppress the other available evidence.
+        identity = attempt("identity", lambda: native.identity(current))
+        info = attempt("information", lambda: native.information(current))
+        path_ok = attempt("path", lambda: (native.require_path(current, current.path), True)[1])
+        sec = attempt("descriptor", lambda: native.security(current))
+        raw = attempt("descriptorBytes", lambda: native.descriptor_bytes(current))
+        differences = policy_difference(sec, science_sid, kind) if sec is not None else None
+        return dict(stage="FAILURE_BEFORE_HANDLE_CLOSURE", parentClass=kind,
+                    path=str(current.path) if current is not None else None,
+                    objectIdentity=identity,
+                    retainedDirectoryIdentityProven=bool(identity is not None and path_ok and info is not None
+                        and info.dwFileAttributes & DIRECTORY and not info.dwFileAttributes & REPARSE),
+                    expectedPolicyId=hashlib.sha256(mutable.parent_sddl(science_sid, kind).encode("ascii")).hexdigest() if kind else None,
+                    actualDescriptor=asdict(sec) if sec is not None else None,
+                    binarySdHex=raw.hex() if raw is not None else None,
+                    binarySdSha256=hashlib.sha256(raw).hexdigest() if raw is not None else None,
+                    firstDifferingField=differences[0]["field"] if differences else None,
+                    allDifferingFields=differences, unavailable=unavailable)
 
     try:
         before = native.token()
@@ -247,13 +286,14 @@ def provision_mutable_parents(state_root: str, science_sid: str, *,
                  "Existing parents require their original approved identities.")
         result = {}
         for kind, path in paths.items():
-            current = current_identity = None
+            current = current_identity = current_owned = None
             recheck()
             if not existing[kind]:
                 native.inherited_create(path)
-                created.append(dict(parentClass=kind, path=str(path), identity=None))
+                current_owned = dict(parentClass=kind, path=str(path), identity=None)
+                created.append(current_owned)
                 record(dict(stage="CREATE", path=str(path), boolResult=True, securityAttributes=None))
-                current = retain(path, SETUP_ACCESS)
+                retain(path, SETUP_ACCESS, active_parent=True)
                 sec, current_identity = observation(current, "CREATED_INHERITED")
                 created[-1]["identity"] = current_identity
                 _safe_parent(sec, trusted)
@@ -266,7 +306,7 @@ def provision_mutable_parents(state_root: str, science_sid: str, *,
                 record(dict(stage="SET_SECURITY_INFO", parentClass=kind, objectIdentity=current_identity,
                             securityInformation=SET_SECURITY_INFORMATION, dwordResult=code))
             else:
-                current = retain(path, mutable.PARENT_ACCESS)
+                retain(path, mutable.PARENT_ACCESS, active_parent=True)
             sec, identity = observation(current, "FINAL_READBACK")
             _require(current_identity is None or current_identity == identity, "Setup object identity changed.")
             _require(mutable.security_matches(sec, science_sid, kind, directory=True),
@@ -284,15 +324,21 @@ def provision_mutable_parents(state_root: str, science_sid: str, *,
         return MutableParentsProvisioned(mutable.PROFILE, mutable.VERSION, result[mutable.COMMON],
                                          tuple(result[k] for k in sorted(mutable.KINDS)))
     except BaseException as exc:
-        unavailable = None
-        if current is not None:
-            try:
-                observation(current, "FAILURE_BEFORE_HANDLE_CLOSURE")
-            except BaseException as read_error:
-                unavailable = dict(type=type(read_error).__name__, message=str(read_error))
+        details = failure_inspection()
+        if current_identity is None and details["retainedDirectoryIdentityProven"]:
+            current_identity = details["objectIdentity"]
+            if current_owned is not None:
+                current_owned["identity"] = current_identity
+        try:
+            record(details)
+        except BaseException as receipt_error:
+            details["unavailable"]["inspectionReceipt"] = dict(
+                type=type(receipt_error).__name__, message=str(receipt_error))
         record(dict(stage="FAILURE", parentClass=kind, objectIdentity=current_identity,
                     exceptionClass=type(exc).__name__, message=str(exc),
-                    winerror=getattr(exc, "winerror", None), descriptorUnavailable=unavailable))
+                    winerror=getattr(exc, "winerror", None), failureInspection=details,
+                    descriptorUnavailable={k: v for k, v in details["unavailable"].items()
+                        if k in {"descriptor", "descriptorBytes"}} or None))
         raise
     finally:
         errors = []
