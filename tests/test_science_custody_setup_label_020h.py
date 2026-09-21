@@ -178,6 +178,34 @@ class LabelSetupTests(unittest.TestCase):
         self.assertTrue(defaults["aces"])
         self.assertTrue(all(not mask & 0xF0000000 and flags == 0 for _, flags, mask, _ in defaults["aces"]))
 
+    def test_failed_open_records_attempt_and_unavailable_grant_for_exact_path(self):
+        targets = [(kind, b.namespace_path(ROOT, kind)) for kind in s.KINDS]
+        targets.append((None, self.native.approved[0].path))
+        for kind, path in targets:
+            with self.subTest(kind=kind, path=path):
+                self.setUp()
+                original = self.native.open
+                def fail(target, **kwargs):
+                    if n._path_key(target) == n._path_key(path):
+                        raise OSError(5, "injected open denied")
+                    return original(target, **kwargs)
+                self.native.open = fail
+                with self.assertRaisesRegex(OSError, "injected open denied"):
+                    self.run_setup()
+                attempts = [r for r in self.rows if r["stage"] == "HANDLE_ATTEMPT" and n._path_key(r["path"]) == n._path_key(path)]
+                failures = [r for r in self.rows if r["stage"] == "HANDLE_FAILED" and n._path_key(r["path"]) == n._path_key(path)]
+                self.assertEqual(len(attempts), 1)
+                self.assertEqual(len(failures), 1)
+                self.assertEqual(attempts[0]["parentClass"], kind)
+                self.assertEqual(attempts[0]["requested"], s.SETUP_ACCESS if kind else b.PARENT_ACCESS)
+                self.assertEqual(attempts[0]["share"], 3)
+                self.assertEqual(attempts[0]["createFlags"], 0x02200000)
+                self.assertIsNone(failures[0]["granted"])
+                self.assertEqual(failures[0]["unavailable"], "OPEN_FAILED_NO_HANDLE_OR_GRANTED_ACCESS")
+                self.assertEqual(n._path_key(self.rows[-1]["path"]), n._path_key(path))
+                self.assertTrue(all(h.closed for h in self.native.handles))
+                self.assertFalse(any(r["stage"] == "ADMISSION_READY" for r in self.rows))
+
 
 if __name__ == "__main__":
     unittest.main()

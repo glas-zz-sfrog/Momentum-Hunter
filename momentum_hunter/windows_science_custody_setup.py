@@ -273,20 +273,28 @@ def provision_mutable_parents(state_root: str, science_sid: str, *,
         return native.security(handle), native.identity(handle)
 
     def retain(path, access, *, active_parent=False):
-        nonlocal current
-        handle = native.open(path, directory=True, access=access, share=3)
+        nonlocal current, current_path
+        current_path = path
+        request = dict(parentClass=kind if active_parent else None, path=str(path),
+                       requested=access, share=3, disposition=3, createFlags=0x02200000)
+        record(dict(stage="HANDLE_ATTEMPT", **request,
+                    granted=None, flags=None, unavailable="OPEN_NOT_COMPLETED"))
+        try:
+            handle = native.open(path, directory=True, access=access, share=3)
+        except BaseException as exc:
+            record(dict(stage="HANDLE_FAILED", **request, exceptionClass=type(exc).__name__,
+                        message=str(exc), winerror=getattr(exc, "winerror", None),
+                        granted=None, flags=None, unavailable="OPEN_FAILED_NO_HANDLE_OR_GRANTED_ACCESS"))
+            raise
         handles.append(handle)
         if active_parent:
             current = handle
-        record(dict(stage="HANDLE_ATTEMPT", path=str(path), requested=access, share=3,
-                    granted="UNAVAILABLE_UNTIL_QUERY", flags="UNAVAILABLE_UNTIL_QUERY"))
         granted, flags = native.granted_access(handle), native.handle_flags(handle)
         # The sealed Arm-B synchronous handle granted SYNCHRONIZE in addition
         # to the requested 0xE0080. No other grant or handle flag is accepted.
         expected_granted = access | SYNCHRONIZE
-        record(dict(stage="HANDLE", path=str(path), requested=access, granted=granted,
-                    expectedGranted=expected_granted, flags=flags, share=3,
-                    disposition=3, createFlags=0x02200000))
+        record(dict(stage="HANDLE", **request, granted=granted,
+                    expectedGranted=expected_granted, flags=flags))
         _require(granted == expected_granted and flags == 0,
                  "Unexpected/inheritable setup handle authority.")
         return handle
@@ -483,7 +491,7 @@ def provision_mutable_parents(state_root: str, science_sid: str, *,
                     parentClass=kind, path=str(current_path) if current_path is not None else None,
                     fileId=current_identity, expectedIntermediateDescriptor=defaults if kind in NESTED_KINDS else None,
                     expectedFinalDescriptor=mutable.parent_sddl(science_sid, kind) if kind else None,
-                    apiSequence=[r for r in events if r["stage"] in {"CREATE_ATTEMPT", "CREATE", "CREATE_FAILED", "HANDLE_ATTEMPT", "HANDLE", "SET_SECURITY_INFO_ATTEMPT", "SET_SECURITY_INFO_FAILED", "SET_SECURITY_INFO"}],
+                    apiSequence=[r for r in events if r["stage"] in {"CREATE_ATTEMPT", "CREATE", "CREATE_FAILED", "HANDLE_ATTEMPT", "HANDLE_FAILED", "HANDLE", "SET_SECURITY_INFO_ATTEMPT", "SET_SECURITY_INFO_FAILED", "SET_SECURITY_INFO"}],
                     intermediateNativeDescriptors=[r for r in events if r["stage"] in {"CREATED_INHERITED", "INTERMEDIATE_READBACK"}],
                     privilegeStateBefore="EXTERNAL_INSTALL_OWNER_RECEIPT_REQUIRED",
                     privilegeStateDuring=before, privilegeStateAfter=after,
