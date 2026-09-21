@@ -514,29 +514,29 @@ class PolicyTests(unittest.TestCase):
 
 class SetupTests(unittest.TestCase):
     def test_setup_is_fixed_provisioning_with_no_existing_repair(self):
-        p = policy()
-        native = BNative(p)
+        from tests.test_science_custody_setup_parity_020g import SetupNative
+        native = SetupNative()
         root = "F:/q/science"
-        expected = {mod._path_key(root), *(mod._path_key(x) for x in PureWindowsPath(root).parents)}
-        approved = tuple(x for x in p.ancestors if mod._path_key(x.path) in expected)
-        with patch.object(setup, "_Native", return_value=native):
-            result = setup.provision_mutable_parents(root, SCIENCE, approved_ancestry=approved)
+        approved = native.approved
+        with patch.object(setup, "_SetupNative", return_value=native):
+            result = setup.provision_mutable_parents(root, SCIENCE, approved_ancestry=approved, record=lambda row: None)
         self.assertEqual(result.version, 2)
         self.assertEqual({x.namespace for x in result.roots}, b.KINDS)
-        self.assertEqual(len(native.mkdirs), 6)
-        self.assertTrue(all(h.closed for h in native.handles.values()))
-        bad = native.objects[mod._path_key(p.root("owner").path)]
+        self.assertEqual(len([a for a in native.actions if a[0] == "create"]), 6)
+        self.assertTrue(all(h.closed for h in native.handles))
+        bad = native.objects[mod._path_key(b.namespace_path(root, "owner"))]
         bad.security = replace(bad.security, group=SCIENCE)
-        with patch.object(setup, "_Native", return_value=native):
+        with patch.object(setup, "_SetupNative", return_value=native):
             with self.assertRaisesRegex(mod.ScienceCustodyNativeError, "exact Architecture-B"):
-                setup.provision_mutable_parents(root, SCIENCE, approved_ancestry=approved)
+                setup.provision_mutable_parents(root, SCIENCE, approved_ancestry=approved,
+                                              record=lambda row: None, existing_parents=(result.common, *result.roots))
         self.assertEqual(bad.security.group, SCIENCE)
 
     def test_unbound_setup_rejected_before_native_io(self):
-        with patch.object(setup, "_Native", side_effect=AssertionError("native access")):
+        with patch.object(setup, "_SetupNative", side_effect=AssertionError("native access")):
             for root in ("F:/q/science", "F:/q/../escape", "relative"):
                 with self.assertRaises(mod.ScienceCustodyNativeError):
-                    setup.provision_mutable_parents(root, SCIENCE, approved_ancestry=())
+                    setup.provision_mutable_parents(root, SCIENCE, approved_ancestry=(), record=lambda row: None)
 
 
 class ReaderSemanticsTests(unittest.TestCase):
