@@ -265,7 +265,7 @@ internal sealed class WriterValidationProtocol
         JsonElement FrozenIdentity, string Policy)
     {
         internal long[] Required => Name == "ancestor" ? [] :
-            (Name.StartsWith("custody_", StringComparison.Ordinal) && Name is not ("custody_staging" or "custody_requests")
+            (Name.StartsWith("custody_", StringComparison.Ordinal) && Name is not ("custody_staging" or "custody_requests") && Policy != "020G_VERSIONED_MUTABLE_PARENT"
                 ? ModifyRights.Append(64) : Needed).Where(x => !Directory || x != 32).ToArray();
     }
     private static readonly long[] ReadRights = [1, 8, 32, 128, 131072, 1048576];
@@ -277,6 +277,10 @@ internal sealed class WriterValidationProtocol
     private List<Target> DiagnosticTargets()
     {
         var result = new List<Target>();
+        var policy = config.GetProperty("host").GetProperty("science").GetProperty("custodyPolicy");
+        var version = policy.TryGetProperty("version", out var versionNode) ? versionNode.GetInt32() : 1;
+        _ = ScienceMutableCustodyContract.Namespaces(version);
+        var isB = version == 2;
         var resources = profile.GetProperty("resources").EnumerateArray().ToDictionary(x => S(x, "name"), StringComparer.Ordinal);
         (long[], long[]) Rights(string name, bool directory, string? leaf = null)
         {
@@ -309,15 +313,20 @@ internal sealed class WriterValidationProtocol
                 resource.GetProperty("file_identity"), "016D_RESOURCE_RULES"));
         }
         var nil = JsonSerializer.SerializeToElement<object?>(null);
-        foreach (var name in new[] { "claims", "receipts", "arrivals", "custody", "cursors", "private", "staging", "requests" })
+        var custodyNames = new[] { "claims", "receipts", "arrivals", "custody", "cursors", "private", "staging", "requests" };
+        if (isB) custodyNames = [.. custodyNames, "owner", "scratch"];
+        foreach (var name in custodyNames)
         {
-            bool transport = name is "staging" or "requests";
-            result.Add(new("custody_" + name, Path.Combine(S(config.GetProperty("host"), "instanceRoot"), "science", name == "cursors" ? "reader/cursors" : name).Replace('/', '\\'), true,
-                transport ? ReadRights : new long[] { 1, 2, 4, 8, 16, 32, 64, 128, 256, 65536, 131072, 262144, 524288, 1048576 },
-                transport ? MutationRights : [], nil, "016E_TRUSTED_FINALIZER_NOT_OS_WORM"));
+            bool transport = name is "staging" or "requests" or "owner" or "scratch";
+            var path = isB ? ScienceMutableCustodyContract.RootPath(S(config.GetProperty("host").GetProperty("science"), "stateRoot"), name, 2) :
+                Path.Combine(S(config.GetProperty("host"), "instanceRoot"), "science", name == "cursors" ? "reader/cursors" : name).Replace('/', '\\');
+            result.Add(new("custody_" + name, path, true,
+                transport ? (isB ? new long[] { 1, 32, 128, 131072, 1048576 } : ReadRights) : new long[] { 1, 2, 4, 8, 16, 32, 64, 128, 256, 65536, 131072, 262144, 524288, 1048576 },
+                transport ? (isB ? MutationRights.Append(8).ToArray() : MutationRights) : [], nil,
+                isB && transport ? "020G_VERSIONED_MUTABLE_PARENT" : "016E_TRUSTED_FINALIZER_NOT_OS_WORM"));
         }
         var explicitPaths = result.Select(x => x.Path).ToHashSet(StringComparer.OrdinalIgnoreCase);
-        Need(result.Count == 30 && explicitPaths.Count == 30, "DIAGNOSTIC_RESOURCE_INVENTORY");
+        Need(result.Count == (isB ? 32 : 30) && explicitPaths.Count == (isB ? 32 : 30), "DIAGNOSTIC_RESOURCE_INVENTORY");
         var ancestors = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         foreach (var path in explicitPaths)
             for (var parent = Path.GetDirectoryName(path); !string.IsNullOrEmpty(parent); parent = Path.GetDirectoryName(parent))
@@ -329,7 +338,7 @@ internal sealed class WriterValidationProtocol
             ("runtime_source", "momentum_hunter/continuous_production.py"), ("host_image_root", "MomentumHunter.ContinuousServiceHost.exe"),
             ("python_base", "python.exe"), ("python_root", "Scripts/python.exe") };
         leaves.AddRange(ReplicaNames.Select(name => (name, "qualification-only.json")));
-        leaves.Add(("science_derived", ".custody-transport.tmp"));
+        leaves.Add(("science_derived", isB ? ".reader.lock" : ".custody-transport.tmp"));
         foreach (var (name, leaf) in leaves)
         {
             var (needed, forbidden) = Rights(name, false, leaf);

@@ -670,6 +670,9 @@ def expected_resource_paths(config):
     p = lambda value: PureWindowsPath(value)
     root = p(config["host"]["instanceRoot"])
     install = p(config["installRoot"])
+    custody_version = config["host"]["science"].get("custodyPolicy", {}).get("version", 1)
+    require(type(custody_version) is int and custody_version in {1, 2}, "Unknown custody support policy version.")
+    science_root = p(config["host"]["science"]["stateRoot"])
     return {
         "runtime_source": install / "source", "host_image_root": install / "host",
         "python_root": install / "python", "python_base": install / "python-base",
@@ -682,7 +685,7 @@ def expected_resource_paths(config):
         "runtime_generation": p(config["hostStateRoot"]) / "runtime",
         "runtime_state": p(config["runtimeStateRoot"]),
         "producer_publication": p(config["researchFactExportV2"]["exportRoot"]),
-        "science_derived": p(config["host"]["science"]["stateRoot"]) / "derived",
+        "science_derived": science_root / ("mutable-v2/reader-lock" if custody_version == 2 else "derived"),
         **{name: root / "writer-denial-controls" / name for name in (
             "unrelated_host", "unrelated_repository", "unrelated_profile", "provider_replica",
             "account_replica", "paper_replica", "scheduler_replica")},

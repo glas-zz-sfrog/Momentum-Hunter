@@ -9,7 +9,6 @@ internal static class DirectScienceAuthority
 {
     private static readonly uint[] ServiceRights = [1, 2, 4, 8, 16, 32, 64, 128, 256, 65536, 131072, 262144, 524288];
     private static readonly uint[] FileWriteRights = [2, 4, 16, 256, 65536, 262144, 524288];
-    private static readonly string[] CustodyNamespaces = ["staging", "requests", "derived", "private", "claims", "receipts", "arrivals", "custody", "cursors"];
     internal static JsonObject Inspect(string serviceName, JsonObject plan, JsonObject config, string configPath,
         ScienceQualificationTargets? qualificationTargets = null)
     {
@@ -67,13 +66,15 @@ internal static class DirectScienceAuthority
                 ["schedulerStorage"] = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Windows), "System32", "Tasks")
             };
             var custodyRoots = config["host"]!["science"]!["custodyPolicy"]!["roots"]!.AsArray();
-            if (custodyRoots.Count != CustodyNamespaces.Length)
+            var custodyVersion = config["host"]!["science"]!["custodyPolicy"]!["version"]!.GetValue<int>();
+            var custodyNamespaces = ScienceMutableCustodyContract.Namespaces(custodyVersion);
+            if (custodyRoots.Count != custodyNamespaces.Length)
                 throw new InvalidDataException("SCIENCE007_CUSTODY_ROOTS_INCOMPLETE");
-            foreach (var custodyNamespace in CustodyNamespaces)
+            foreach (var custodyNamespace in custodyNamespaces)
             {
                 var binding = custodyRoots.Single(x => x!["namespace"]!.GetValue<string>() == custodyNamespace)!;
                 var scienceRoot = config["host"]!["science"]!["stateRoot"]!.GetValue<string>();
-                var expected = custodyNamespace == "cursors" ? Path.Combine(scienceRoot, "reader", "cursors") : Path.Combine(scienceRoot, custodyNamespace);
+                var expected = ScienceMutableCustodyContract.RootPath(scienceRoot, custodyNamespace, custodyVersion);
                 if (!Path.GetFullPath(binding["path"]!.GetValue<string>()).Equals(Path.GetFullPath(expected), StringComparison.OrdinalIgnoreCase))
                     throw new InvalidDataException("SCIENCE007_CUSTODY_ROOT_NOT_HOST_BOUND");
                 var role = "scienceStorage:" + custodyNamespace;
@@ -98,14 +99,17 @@ internal static class DirectScienceAuthority
                 var custodyRole = role.StartsWith("scienceStorage:", StringComparison.Ordinal);
                 if (custodyRole && (!directory || !exists))
                     throw new InvalidDataException("SCIENCE007_FIXED_CUSTODY_ROOT_UNAVAILABLE");
-                var custodyTransport = role is "scienceStorage:staging" or "scienceStorage:requests" or "scienceStorage:derived";
+                var custodyTransport = role is "scienceStorage:staging" or "scienceStorage:requests" or "scienceStorage:derived" ||
+                    (custodyVersion == 2 && role is "scienceStorage:owner" or "scienceStorage:scratch");
                 var requiredRead = (custodyRole && role != "scienceStorage:private") || role is "runtimeSource" or "publication" or "scienceCustody" or "scienceLog" or "scienceGeneration" or "nonsecretConfiguration" or "upstreamGenerations";
                 var requiredWrite = role is "scienceLog" or "scienceGeneration";
                 var deniedRead = role is "providerSecret" or "accountSecret" or "brokerSecret" or "writerKey" or "qualificationWriterKey" or "scienceStorage:private";
                 var checks = new List<(uint Right, bool Allowed)>();
                 if (requiredRead || deniedRead) checks.Add((1, requiredRead));
-                checks.AddRange(FileWriteRights.Select(r => (r, requiredWrite || (custodyTransport && r is 2 or 4))));
-                if (directory) checks.Add((64, requiredWrite || custodyTransport));
+                checks.AddRange(FileWriteRights.Select(r => (r, requiredWrite ||
+                    (custodyTransport && ScienceMutableCustodyContract.MutableParentRight(custodyVersion, r)))));
+                if (directory) checks.Add((64, requiredWrite ||
+                    (custodyTransport && ScienceMutableCustodyContract.MutableParentRight(custodyVersion, 64))));
                 // Modify does not grant ownership/DACL changes, even in Science roots.
                 for (var index = 0; index < checks.Count; index++)
                     if (checks[index].Right is 262144 or 524288) checks[index] = (checks[index].Right, false);

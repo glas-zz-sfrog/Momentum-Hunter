@@ -322,7 +322,11 @@ def science_custody_policy(config: Mapping):
             raise HostConfigurationError("Science007 source/account binding differs from installed host.")
         root = absolute_root(settings["stateRoot"])
         for binding in policy.roots:
-            expected = root / "reader" / "cursors" if binding.namespace == "cursors" else root / binding.namespace
+            if policy.version == 2:
+                from momentum_hunter.science_mutable_policy import namespace_path
+                expected = absolute_root(namespace_path(str(root), binding.namespace))
+            else:
+                expected = root / "reader" / "cursors" if binding.namespace == "cursors" else root / binding.namespace
             if absolute_root(binding.path) != expected:
                 raise HostConfigurationError("Science007 namespace differs from fixed host custody role.")
         if policy.actor_profile is not None:
@@ -341,7 +345,7 @@ def permission_map(config: Mapping, config_path: Path | None = None) -> dict:
             "access": ["READ_REQUIRED"], "write": False},
         "scienceStorageRoles": {
             binding.namespace: {"path": binding.path, "ownerSid": binding.owner_sid,
-                "access": "SCIENCE_MUTABLE_TRANSPORT_ONLY" if binding.namespace in ("staging", "requests", "derived")
+                "access": "SCIENCE_MUTABLE_TRANSPORT_ONLY" if binding.namespace in ("staging", "requests", "derived", "owner", "scratch")
                 else "WRITER_ONLY" if binding.namespace == "private" else "SCIENCE_READ_AUDIT_ONLY",
                 "descriptorSha256": binding.descriptor_sha256}
             for binding in science_custody_policy(config).roots},

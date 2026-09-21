@@ -6,6 +6,7 @@
     <Nullable>enable</Nullable>
   </PropertyGroup>
   <ItemGroup>
+    <Compile Include="../../src/MomentumHunter.ContinuousServiceHost/ScienceMutableCustodyContract.cs" Link="ScienceMutableCustodyContract.cs" />
     <Compile Include="../../src/MomentumHunter.ContinuousServiceHost/DirectScienceGeneration.cs" Link="DirectScienceGeneration.cs" />
     <Compile Include="../../src/MomentumHunter.ContinuousServiceHost/ScienceServiceDaclPolicy.cs" Link="ScienceServiceDaclPolicy.cs" />
     <Compile Include="../../src/MomentumHunter.ContinuousServiceHost/DirectScienceTokenContract.cs" Link="DirectScienceTokenContract.cs" />

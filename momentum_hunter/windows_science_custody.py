@@ -25,6 +25,7 @@ from momentum_hunter.windows_writer_profile import (
 )
 
 from momentum_hunter import windows_writer_storage as storage
+from momentum_hunter import science_mutable_policy as mutable
 from momentum_hunter.science_custody_commit import (
     CustodyCommitConflict, CustodyCommitIntegrityError, CustodyObjectEvidence,
     MAX_REQUEST_BYTES as PROTOCOL_METADATA_BYTES, validate_relative_path,
@@ -185,8 +186,12 @@ class ScienceCustodyPolicy:
         _require(self.writer_sid not in self.science_authority_sids
                  and "S-1-5-18" not in self.science_authority_sids,
                  "Science overlaps a trusted Writer/SYSTEM authority.")
-        _require(type(self.version) is int and self.version == PROFILE_VERSION,
+        _require(type(self.version) is int and self.version in {PROFILE_VERSION, mutable.VERSION},
                  "Unknown custody policy version.")
+        if self.version == mutable.VERSION:
+            _require(self.actor_profile is not None and self.writer_sid == mutable.WRITER
+                     and self.object_integrity_sid == mutable.HIGH,
+                     "Architecture B requires the admitted SCM actors and HIGH/NW policy.")
         if self.actor_profile is not None:
             _require(type(self.actor_profile) is ScmRoleProfile, "Unknown native actor profile.")
             self.actor_profile.__post_init__()
@@ -200,9 +205,13 @@ class ScienceCustodyPolicy:
         _bound(self.max_pinned_directories, 1_000_000)
         _require(type(self.max_mailbox_entries) is int and self.max_mailbox_entries == 2,
                  "The fixed orphan-recovery protocol requires exactly two staging entries.")
-        _require(len(self.roots) == len(ROOT_NAMES)
-                 and {x.namespace for x in self.roots} == ROOT_NAMES,
-                 "All nine exact namespace bindings are required.")
+        _require(len(self.roots) == len(self.root_names)
+                 and {x.namespace for x in self.roots} == self.root_names,
+                 "Every exact versioned namespace binding is required.")
+        if self.version == mutable.VERSION:
+            state_root = str(PureWindowsPath(self.root("private").path).parent)
+            _require(all(_path_key(x.path) == _path_key(mutable.namespace_path(state_root, x.namespace))
+                         for x in self.roots), "Architecture-B namespace is not the fixed v2 topology.")
         root_paths = [_path_key(x.path) for x in self.roots]
         _require(len(set(root_paths)) == len(root_paths), "Root alias collision.")
         for a in root_paths:
@@ -222,6 +231,19 @@ class ScienceCustodyPolicy:
                      for x in self.ancestors), "Science-owned ancestor is unsafe.")
 
     @property
+    def root_names(self) -> frozenset[str]:
+        return ROOT_NAMES | {"owner", "scratch"} if self.version == mutable.VERSION else ROOT_NAMES
+
+    @property
+    def profile(self) -> str:
+        return mutable.PROFILE if self.version == mutable.VERSION else PROFILE
+
+    @property
+    def mutable_parent_path(self) -> str:
+        _require(self.version == mutable.VERSION, "No v2 common parent in v1 policy.")
+        return str(PureWindowsPath(self.root("owner").path).parent)
+
+    @property
     def science_authority_sids(self) -> frozenset[str]:
         return frozenset((self.science_sid, "S-1-1-0", *self.science_group_sids))
 
@@ -232,7 +254,7 @@ class ScienceCustodyPolicy:
             values.pop("actor_profile")
         else:
             values["actor_profile"] = encode_profile(self.actor_profile)
-        return _digest({"profile": PROFILE, **values})
+        return _digest({"profile": self.profile, **values})
 
     def root(self, namespace: str) -> CustodyRootBinding:
         for item in self.roots:
@@ -256,6 +278,8 @@ class _Security:
     aces: tuple[tuple[int, int, int, str], ...]
     labels: tuple[tuple[int, int, str], ...]
     protected: bool
+    group: str | None = None
+    control: int | None = None
 
     @property
     def digest(self) -> str:
@@ -302,6 +326,11 @@ def creation_sddl(policy: ScienceCustodyPolicy, kind: str, *, directory: bool,
     This function only returns text. The backend never provisions fixed roots
     or changes an existing object's ACL or integrity label.
     """
+    if getattr(policy, "version", 1) == mutable.VERSION:
+        if kind in mutable.KINDS | {mutable.COMMON}:
+            _require(directory, "Architecture-B children require NULL CreatorDescriptor.")
+            return mutable.parent_sddl(policy.science_sid, kind)
+        _require(kind in {"private", "trusted"}, "Legacy mutable descriptors are forbidden in v2.")
     _require(kind in {"private", "trusted", "transport"} or
              (kind == "derived" and getattr(policy, "actor_profile", None) is not None), "Unknown descriptor kind.")
     owner = policy.science_sid if kind in {"transport", "derived"} and not directory else policy.writer_sid
@@ -328,6 +357,10 @@ def _generic(mask: int) -> int:
 
 def _verify_security(policy: ScienceCustodyPolicy, sec: _Security, kind: str,
                      *, directory: bool) -> None:
+    if getattr(policy, "version", 1) == mutable.VERSION and kind in mutable.KINDS | {mutable.COMMON}:
+        _require(mutable.security_matches(sec, policy.science_sid, kind, directory=directory),
+                 "Actual Architecture-B owner/group/DACL/control/integrity differs from exact policy.")
+        return
     expected_owner = policy.science_sid if kind in {"transport", "derived"} and not directory else policy.writer_sid
     _require(sec.owner == expected_owner, "Actual opened object has the wrong owner.")
     _require(sec.protected, "Object DACL inheritance is not protected.")
@@ -518,7 +551,7 @@ class _Native:
             _require(all(x[0] == 0x11 for x in label_aces), "Unexpected label information.")
             return _Security(self.sid(owner), text.value, aces,
                              tuple((x[1], x[2], x[3]) for x in label_aces),
-                             bool(control.value & 0x1000))
+                             bool(control.value & 0x1000), self.sid(group), control.value)
         finally:
             if text:
                 self.k.LocalFree(c.cast(text, c.c_void_p))
@@ -566,6 +599,29 @@ class _Native:
 
     def identity(self, handle) -> tuple[int, int, int]:
         return storage._file_identity(handle)
+
+    def granted_access(self, handle) -> int:
+        query = c.WinDLL("ntdll").NtQueryObject
+        query.argtypes = [self.w.HANDLE, c.c_int, c.c_void_p, self.w.ULONG,
+                          c.POINTER(self.w.ULONG)]
+        query.restype = self.w.LONG
+        info = c.create_string_buffer(56)
+        returned = self.w.ULONG()
+        status = query(handle.value, 0, info, len(info), c.byref(returned))
+        _require(status == 0 and returned.value >= 8,
+                 "Cannot prove granted native handle access.")
+        return int.from_bytes(info.raw[4:8], "little")
+
+    def reader_stream(self, handle):
+        """Transfer the already-validated handle; never reopen by pathname."""
+        import msvcrt
+        fd = msvcrt.open_osfhandle(handle.value, os.O_BINARY | os.O_RDWR)
+        handle.closed = True
+        try:
+            return os.fdopen(fd, "r+b")
+        except BaseException:
+            os.close(fd)
+            raise
 
     def require_path(self, handle, path: Path) -> None:
         storage._require_final_path(handle, path)
@@ -700,6 +756,8 @@ class WindowsScienceCustodyBackend:
         self.last_token_observation = observed
 
     def _kind(self, namespace: str) -> str:
+        if self.policy.version == mutable.VERSION and namespace in mutable.KINDS:
+            return namespace
         if namespace == "derived" and self.policy.actor_profile is not None:
             return "derived"
         return "private" if namespace == "private" else (
@@ -725,7 +783,7 @@ class WindowsScienceCustodyBackend:
             _verify_security(self.policy, sec, kind, directory=directory)
             if self.policy.actor_profile is not None and (
                     (self.role == "science" and kind in {"trusted", "private"}) or
-                    (self.role == "writer" and kind in {"transport", "derived"})):
+                    (self.role == "writer" and kind in {"transport", "derived"} | mutable.KINDS | {mutable.COMMON})):
                 decisions = access_decisions(self._native, sec.sddl, MUTATION_RIGHTS)
                 _require(not any(decisions.values()), "Actual native actor has forbidden namespace authority.")
         return sec
@@ -736,13 +794,17 @@ class WindowsScienceCustodyBackend:
         if key in self._pins:
             return
         try:
-            handle = self._native.open(path, directory=True, access=0x1200A0, share=3)
+            handle = self._native.open(path, directory=True,
+                access=mutable.PARENT_ACCESS if self.policy.version == mutable.VERSION else 0x1200A0, share=3)
         except OSError as exc:
             if exc.winerror in {2, 3, 5}:
                 raise ScienceCustodyNativeError("Required bound root/ancestor is unavailable.") from exc
             raise
         try:
             kind = "ancestor" if ancestor else self._kind(binding.namespace)
+            if (self.policy.version == mutable.VERSION
+                    and key == _path_key(self.policy.mutable_parent_path)):
+                kind = mutable.COMMON
             sec = self._validate_handle(handle, path, kind=kind, directory=True)
             identity = self._native.identity(handle)
             _require(identity == binding.file_identity and sec.owner == binding.owner_sid
@@ -757,6 +819,14 @@ class WindowsScienceCustodyBackend:
             raise
 
     def _check_pins(self) -> None:
+        try:
+            self._check_pins_current()
+        except BaseException:
+            if self.policy.version == mutable.VERSION:
+                self.close()
+            raise
+
+    def _check_pins_current(self) -> None:
         _require(not self._closed, "Native custody backend is closed.")
         _require(self.policy_sha256 == self.policy.policy_sha256, "Immutable policy drift.")
         self._actor()
@@ -769,7 +839,7 @@ class WindowsScienceCustodyBackend:
                      "Pinned topology/security changed during the process lifetime.")
 
     def _directory(self, namespace: str, parts: tuple[str, ...], *, create: bool = False):
-        _require(namespace in ROOT_NAMES and not (self.role == "science" and namespace == "private"),
+        _require(namespace in self.policy.root_names and not (self.role == "science" and namespace == "private"),
                  "Namespace unavailable to this role.")
         path = self.namespace_root(namespace)
         current = self._pins[_path_key(path)][0]
@@ -807,14 +877,18 @@ class WindowsScienceCustodyBackend:
         return current
 
     def _acquire_lease(self) -> None:
-        namespace = "private" if self.role == "writer" else "derived"
+        is_b = self.policy.version == mutable.VERSION and self.role == "science"
+        namespace = "private" if self.role == "writer" else ("owner" if is_b else "derived")
         name = ".writer-owner.lock" if self.role == "writer" else ".science-owner.lock"
         path = self.namespace_root(namespace) / name
         kind = self._kind(namespace)
-        handle = self._native.open(path, access=0xC0020000, share=0, disposition=4,
-                    sddl=creation_sddl(self.policy, kind, directory=False))
+        handle = self._native.open(path, access=mutable.OWNER_LEASE_ACCESS if is_b else 0xC0020000,
+                    share=0, disposition=4,
+                    sddl=None if is_b else creation_sddl(self.policy, kind, directory=False))
         try:
             self._validate_handle(handle, path, kind=kind, directory=False)
+            if is_b:
+                self._require_access(handle, mutable.OWNER_LEASE_ACCESS)
             self._lease = handle
             self.lease_identity = _digest({"policy": self.policy_sha256, "role": self.role,
                                           "object": self._native.identity(handle)})
@@ -826,21 +900,44 @@ class WindowsScienceCustodyBackend:
     def _prepare_reader_lock(self) -> None:
         """Prepare only the nonauthoritative mutable child before Reader opens it.
 
-        OPEN_ALWAYS applies the explicit descriptor only to a new file. An
-        incompatible existing file is validated and rejected, never repaired.
-        The lifetime Science lease is already held; this temporary read handle
-        closes before the unchanged Reader's ordinary a+b acquisition.
+        V1 applies its explicit descriptor to a new file; V2 inherits from
+        its fixed parent with NULL security attributes. Existing incompatible
+        files are rejected, never repaired. This temporary handle closes
+        before the Reader acquires its version-specific lock handle.
         """
         _require(self.role == "science" and self._lease is not None,
                  "Reader lock preparation requires the acquired Science lifetime lease.")
         path = self.derived_root / ".reader.lock"
         kind = self._kind("derived")
-        handle = self._native.open(path, access=READ, share=1, disposition=4,
-                    sddl=creation_sddl(self.policy, kind, directory=False))
+        is_b = self.policy.version == mutable.VERSION
+        handle = self._native.open(path, access=mutable.READER_LOCK_ACCESS if is_b else READ,
+                    share=3 if is_b else 1, disposition=4,
+                    sddl=None if is_b else creation_sddl(self.policy, kind, directory=False))
         try:
             self._validate_handle(handle, path, kind=kind, directory=False)
+            if is_b:
+                self._require_access(handle, mutable.READER_LOCK_ACCESS)
         finally:
             handle.close()
+
+    def _require_access(self, handle, expected: int) -> None:
+        _require(self._native.granted_access(handle) == expected,
+                 "Actual granted handle rights differ from the exact requested B mask.")
+
+    def open_reader_lock(self):
+        _require(self.policy.version == mutable.VERSION and self.role == "science"
+                 and self._lease is not None, "B Reader acquisition requires its admitted Science owner.")
+        with self.transaction():
+            path = self.derived_root / ".reader.lock"
+            handle = self._native.open(path, access=mutable.READER_LOCK_ACCESS,
+                                       share=3, disposition=4, sddl=None)
+            try:
+                self._validate_handle(handle, path, kind="derived", directory=False)
+                self._require_access(handle, mutable.READER_LOCK_ACCESS)
+                self._check_pins()
+                return self._native.reader_stream(handle)
+            finally:
+                handle.close()
 
     @contextmanager
     def transaction(self) -> Iterator[None]:
@@ -862,7 +959,7 @@ class WindowsScienceCustodyBackend:
     @property
     def security_contract_evidence(self) -> dict[str, object]:
         with self.transaction():
-            return {"profile": PROFILE, "policy_sha256": self.policy_sha256,
+            return {"profile": self.policy.profile, "policy_sha256": self.policy_sha256,
                     "source_root_identity": self.source_root_identity,
                     "role": self.role, "token": dict(self.last_token_observation),
                     "native_role_admission": self._admission,
@@ -934,7 +1031,8 @@ class WindowsScienceCustodyBackend:
         try:
             # Read data/attributes/security only. Deny concurrent byte writers,
             # permit rename, and never reopen a pathname to consume its bytes.
-            handle = self._native.open(path, access=0x120081 if handoff else READ,
+            narrow = self.policy.version == mutable.VERSION and namespace in TRANSPORT
+            handle = self._native.open(path, access=0x120081 if handoff or narrow else READ,
                                        share=5 if handoff else 1)
         except OSError as exc:
             if missing and exc.winerror == 2:
@@ -973,8 +1071,9 @@ class WindowsScienceCustodyBackend:
         parent = self._directory(namespace, parts[:-1], create=not transport)
         _require(parent is not None, "Bound publish parent is absent.")
         target = parent.path / parts[-1]
-        kind = "transport" if transport else "trusted"
-        private_namespace = "derived" if transport else "private"
+        is_b = transport and self.policy.version == mutable.VERSION
+        kind = ("scratch" if is_b else "transport") if transport else "trusted"
+        private_namespace = ("scratch" if is_b else "derived") if transport else "private"
         if transport:
             self._recover_transport_scratch()
             temp_name = ".custody-transport.tmp"
@@ -985,8 +1084,8 @@ class WindowsScienceCustodyBackend:
                                  "relative": relative, "sha256": hashlib.sha256(raw).hexdigest()}) + ".tmp"
         temp = self.namespace_root(private_namespace) / temp_name
         try:
-            handle = self._native.open(temp, access=0xC0030000, share=1, disposition=1,
-                                   sddl=creation_sddl(self.policy, kind, directory=False))
+            handle = self._native.open(temp, access=mutable.TRANSPORT_ACCESS if is_b else 0xC0030000,
+                share=1, disposition=1, sddl=None if is_b else creation_sddl(self.policy, kind, directory=False))
         except OSError as exc:
             if transport or exc.winerror not in {80, 183}:
                 raise
@@ -1005,6 +1104,8 @@ class WindowsScienceCustodyBackend:
                 raise
         try:
             self._validate_handle(handle, temp, kind=kind, directory=False)
+            if is_b:
+                self._require_access(handle, mutable.TRANSPORT_ACCESS)
             self._native.write(handle, raw)
             written = self._snapshot(handle, temp, kind, max(1, len(raw)))
             _require(written.raw == raw, "Private copy differs from supplied immutable bytes.")
@@ -1026,7 +1127,9 @@ class WindowsScienceCustodyBackend:
             if not completion:
                 self._native.checked(self._native.k.FlushFileBuffers(handle.value),
                                      "Flush committed object")
-            result = self._snapshot(handle, target, kind, max(1, len(raw)))
+            if is_b:
+                self._check_pins()
+            result = self._snapshot(handle, target, self._kind(namespace) if is_b else kind, max(1, len(raw)))
             _require(result.raw == raw and result.file_identity == written.file_identity,
                      "Published object identity/bytes changed.")
             return True, result
@@ -1037,15 +1140,18 @@ class WindowsScienceCustodyBackend:
     def _recover_transport_scratch(self) -> None:
         """Discard only the fixed nonauthoritative unpublished serialization."""
         _require(self.role == "science", "Only Science owns transport scratch recovery.")
-        path = self.derived_root / ".custody-transport.tmp"
+        is_b = self.policy.version == mutable.VERSION
+        path = (self.namespace_root("scratch") if is_b else self.derived_root) / ".custody-transport.tmp"
         try:
-            handle = self._native.open(path, access=READ | DELETE, share=1)
+            handle = self._native.open(path, access=mutable.RECOVERY_ACCESS if is_b else READ | DELETE, share=1)
         except OSError as exc:
             if exc.winerror == 2:
                 return
             raise
         try:
-            self._validate_handle(handle, path, kind="transport", directory=False)
+            self._validate_handle(handle, path, kind="scratch" if is_b else "transport", directory=False)
+            if is_b:
+                self._require_access(handle, mutable.RECOVERY_ACCESS)
             # No admissible request can reference this fixed derived-root name.
             # Atomic rename uses no second hard link; a completed publication
             # therefore cannot leave a scratch alias behind.
@@ -1135,14 +1241,17 @@ class WindowsScienceCustodyBackend:
         maximum = self._namespace_byte_bound(namespace)
         with self.transaction():
             path = self.namespace_root(namespace) / name
+            is_b = self.policy.version == mutable.VERSION
             try:
-                handle = self._native.open(path, access=READ | DELETE, share=1)
+                handle = self._native.open(path, access=mutable.RECOVERY_ACCESS if is_b else READ | DELETE, share=1)
             except OSError as exc:
                 if exc.winerror == 2:
                     return False
                 raise
             try:
-                observed = self._snapshot(handle, path, "transport", maximum)
+                if is_b:
+                    self._require_access(handle, mutable.RECOVERY_ACCESS)
+                observed = self._snapshot(handle, path, self._kind(namespace) if is_b else "transport", maximum)
                 if observed.file_identity != expected_identity or hashlib.sha256(
                         observed.raw).hexdigest() != expected_sha256:
                     raise CustodyCommitConflict(

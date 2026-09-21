@@ -103,20 +103,30 @@ def token_envelope(token):
 def targets(config, profile):
     profile_api.validate_profile_paths(config, profile)
     root = PureWindowsPath(config["host"]["instanceRoot"])
+    version = config["host"]["science"].get("custodyPolicy", {}).get("version", 1)
+    is_b = version == 2
     result = []
     for binding in profile.resources:
         needed, forbidden = profile_api.resource_rights(binding.name, binding.directory)
         result.append(dict(name=binding.name, path=binding.path, directory=binding.directory,
                            needed=needed, forbidden=forbidden, frozenIdentity=binding.file_identity,
                            policy="016D_RESOURCE_RULES"))
-    for name, relative, transport in (("claims", "claims", False), ("receipts", "receipts", False),
+    custody_targets = [("claims", "claims", False), ("receipts", "receipts", False),
             ("arrivals", "arrivals", False), ("custody", "custody", False),
             ("cursors", "reader/cursors", False), ("private", "private", False),
-            ("staging", "staging", True), ("requests", "requests", True)):
-        result.append(dict(name="custody_" + name, path=str(root / "science" / relative), directory=True,
-            needed=profile_api._READ if transport else profile_api.FILE_RIGHTS,
-            forbidden=profile_api.MUTATION_RIGHTS if transport else (), frozenIdentity=None,
-            policy="016E_TRUSTED_FINALIZER_NOT_OS_WORM"))
+            ("staging", "staging", True), ("requests", "requests", True)]
+    if is_b:
+        custody_targets.extend((("owner", "", True), ("scratch", "", True)))
+    for name, relative, transport in custody_targets:
+        if is_b:
+            from momentum_hunter.science_mutable_policy import namespace_path
+            path = namespace_path(config["host"]["science"]["stateRoot"], name)
+        else:
+            path = str(root / "science" / relative)
+        result.append(dict(name="custody_" + name, path=path, directory=True,
+            needed=(profile_api._META if is_b else profile_api._READ) if transport else profile_api.FILE_RIGHTS,
+            forbidden=((*profile_api.MUTATION_RIGHTS, 8) if is_b else profile_api.MUTATION_RIGHTS) if transport else (), frozenIdentity=None,
+            policy="020G_VERSIONED_MUTABLE_PARENT" if is_b and transport else "016E_TRUSTED_FINALIZER_NOT_OS_WORM"))
     explicit = {PureWindowsPath(item["path"]) for item in result}
     ancestors = {parent for path in explicit for parent in path.parents} - explicit
     for path in sorted(ancestors):
@@ -133,12 +143,12 @@ def targets(config, profile):
     leaves.extend((name, "qualification-only.json") for name in (
         "unrelated_host", "unrelated_repository", "unrelated_profile", "provider_replica",
         "account_replica", "paper_replica", "scheduler_replica"))
-    leaves.append(("science_derived", ".custody-transport.tmp"))
+    leaves.append(("science_derived", ".reader.lock" if is_b else ".custody-transport.tmp"))
     for name, relative in leaves:
         needed, forbidden = profile_api.resource_rights(name, False, relative)
         result.append(dict(name=name + ":" + relative, path=str(paths[name] / relative), directory=False,
             needed=needed, forbidden=forbidden, frozenIdentity=None, policy="016D_EXPLICIT_LEAF"))
-    if not 30 <= len(result) <= MAX_TARGETS or len(explicit) != 30:
+    if not 30 <= len(result) <= MAX_TARGETS or len(explicit) != (32 if is_b else 30):
         raise ValueError("TARGET_INVENTORY_BOUND")
     return result
 
@@ -260,7 +270,8 @@ def required_rights(target):
     if target["name"] == "ancestor":
         return ()
     rights = target["needed"]
-    if target["name"].startswith("custody_") and target["name"] not in {"custody_staging", "custody_requests"}:
+    if (target["name"].startswith("custody_") and target["name"] not in {"custody_staging", "custody_requests"}
+            and target["policy"] != "020G_VERSIONED_MUTABLE_PARENT"):
         rights = (*profile_api._MODIFY, 64)
     return tuple(right for right in rights if not (target["directory"] and right == 32))
 

@@ -128,31 +128,40 @@ class SourceReaderRun:
 
 
 class _ReaderLock:
-    def __init__(self, path: Path) -> None:
+    def __init__(self, path: Path, *, acquire_stream=None) -> None:
         self.path = path
+        self._acquire_stream = acquire_stream
         self.handle: object | None = None
 
     def acquire(self) -> None:
-        self.path.parent.mkdir(parents=True, exist_ok=True)
-        handle = self.path.open("a+b")
-        handle.seek(0, os.SEEK_END)
-        if handle.tell() == 0:
-            handle.write(b"\0")
-            handle.flush()
-            os.fsync(handle.fileno())
-        handle.seek(0)
+        if self._acquire_stream is None:
+            self.path.parent.mkdir(parents=True, exist_ok=True)
+            handle = self.path.open("a+b")
+        else:
+            # Native custody already owns/pins this parent. Never fall back to
+            # an ordinary open or create/repair its security in the Reader.
+            handle = self._acquire_stream()
         try:
-            if os.name == "nt":
-                import msvcrt
+            handle.seek(0, os.SEEK_END)
+            if handle.tell() == 0:
+                handle.write(b"\0")
+                handle.flush()
+                os.fsync(handle.fileno())
+            handle.seek(0)
+            try:
+                if os.name == "nt":
+                    import msvcrt
 
-                msvcrt.locking(handle.fileno(), msvcrt.LK_NBLCK, 1)
-            else:
-                import fcntl
+                    msvcrt.locking(handle.fileno(), msvcrt.LK_NBLCK, 1)
+                else:
+                    import fcntl
 
-                fcntl.flock(handle.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
-        except (OSError, BlockingIOError) as exc:
+                    fcntl.flock(handle.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+            except (OSError, BlockingIOError) as exc:
+                raise SourceReaderError("Another reader owns this Science state root.") from exc
+        except BaseException:
             handle.close()
-            raise SourceReaderError("Another reader owns this Science state root.") from exc
+            raise
         self.handle = handle
 
     def release(self) -> None:
@@ -235,7 +244,8 @@ class StrategyScienceSourceReaderV2:
         self.recorder = recorder
         self._closed = False
         lock_root = self.state_root if custody_storage_set is None else custody_storage_set.derived_root
-        self._lock = _ReaderLock(lock_root / ".reader.lock")
+        self._lock = _ReaderLock(lock_root / ".reader.lock", acquire_stream=(
+            None if custody_storage_set is None else custody_storage_set.reader_lock_opener))
         self._lock.acquire()
         try:
             self._load_state()

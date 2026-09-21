@@ -3,6 +3,35 @@ using System.Text.Json;
 using MomentumHunter.ContinuousServiceHost;
 
 if (args.Length > 0 && args[0] is "writer-suite" or "writer-child") return await WriterProtocolCases.Run(args);
+if (args.Length == 3 && args[0] == "custody-targets")
+{
+    using var config = JsonDocument.Parse(File.ReadAllBytes(args[1]));
+    using var expected = JsonDocument.Parse(File.ReadAllBytes(args[2]));
+    var protocol = new WriterValidationProtocol(config.RootElement);
+    var method = typeof(WriterValidationProtocol).GetMethod("DiagnosticTargets", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!;
+    var targets = (System.Collections.IEnumerable)method.Invoke(protocol, null)!;
+    var serialized = new List<System.Text.Json.Nodes.JsonObject>();
+    foreach (var target in targets)
+    {
+        var node = JsonSerializer.SerializeToNode(target)!.AsObject();
+        node["Required"] = JsonSerializer.SerializeToNode(target!.GetType().GetProperty("Required",
+            System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!.GetValue(target));
+        serialized.Add(node);
+    }
+    var actual = JsonSerializer.SerializeToElement(serialized);
+    var reference = expected.RootElement.EnumerateArray().ToDictionary(x => x.GetProperty("path").GetString()!, StringComparer.Ordinal);
+    foreach (var row in actual.EnumerateArray())
+    {
+        if (!reference.Remove(row.GetProperty("Path").GetString()!, out var other)) throw new Exception("TARGET_PATH_DIFF");
+        foreach (var (left, right) in new[] { ("Name", "name"), ("Directory", "directory"), ("Needed", "needed"),
+            ("Forbidden", "forbidden"), ("FrozenIdentity", "frozenIdentity"), ("Policy", "policy"), ("Required", "required") })
+            if (!WriterValidationProtocol.Canonical(row.GetProperty(left)).SequenceEqual(WriterValidationProtocol.Canonical(other.GetProperty(right))))
+                throw new Exception("TARGET_POLICY_DIFF:" + left + ":" + row.GetProperty("Path").GetString());
+    }
+    if (reference.Count != 0) throw new Exception("TARGETS_OMITTED");
+    Console.WriteLine("020G_PYTHON_COMPILED_TARGET_PARITY=PASS; COUNT=" + actual.GetArrayLength());
+    return 0;
+}
 
 if (args.Length > 0 && args[0] == "child")
 {

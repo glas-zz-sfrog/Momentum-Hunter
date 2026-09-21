@@ -79,6 +79,8 @@ The caller owns this object's lifetime independently of recorder views.
         self.roots = self.backend.validate_readonly_roots()
         self.source_root_identity = self.backend.source_root_identity
         self.derived_root = self.backend.derived_root
+        self.policy_version = getattr(getattr(self.backend, 'policy', None), 'version', 1)
+        self.reader_lock_opener = self.backend.open_reader_lock if self.policy_version == 2 else None
         # Before any new namespace guards are opened, reconcile an old transport
         # receipt. The subsequent canonical startup audit still has to succeed.
         pending = self.client.recover_pending()
@@ -210,7 +212,7 @@ class SealedScienceStorage:
         self.owner_evidence = ScienceCommitOwnerEvidence(
             root_identity=root_identity,
             topology_fingerprint=storage_set.backend.policy_sha256,
-            topology_version=1,
+            topology_version=storage_set.policy_version,
             lease_identity=hashlib.sha256((storage_set.backend.policy_sha256 + ':' +
                                           alias + ':' + root_identity).encode('ascii')).hexdigest(),
             lease_name='SCIENCE_TRANSPORT_LIFETIME_LOCK_NOT_WRITER_PROCESS_IDENTITY',

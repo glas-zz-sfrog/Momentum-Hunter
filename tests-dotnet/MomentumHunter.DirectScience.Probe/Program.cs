@@ -8,6 +8,20 @@ const string before = "O:SYG:SYD:(A;;CCLCSWRPWPDTLOCRRC;;;SY)(A;;CCDCLCSWRPWPDTL
 var passed = new List<string>();
 void Check(bool value, string test) { if (!value) throw new Exception(test); passed.Add(test); }
 void Reject(Action run, string test) { try { run(); } catch (InvalidDataException) { passed.Add(test); return; } throw new Exception(test); }
+foreach (var version in new[] { 1, 2 })
+{
+    Check(ScienceMutableCustodyContract.Namespaces(version).Length == (version == 1 ? 9 : 11), "020G-exact-topology-" + version);
+    foreach (var right in new uint[] { 2, 4, 16, 64, 256, 65536, 262144, 524288 })
+        Check(ScienceMutableCustodyContract.MutableParentRight(version, right) ==
+            (right == 2 || (version == 1 && right is 4 or 64)), "020G-parent-right-" + version + "-" + right);
+    Check(ScienceMutableCustodyContract.RootPath(@"F:\q\science", "cursors", version) == @"F:\q\science\reader\cursors", "020G-cursor-unchanged-" + version);
+}
+foreach (var item in new[] { ("owner", @"mutable-v2\owner-lease"), ("derived", @"mutable-v2\reader-lock"),
+    ("scratch", @"mutable-v2\transport-scratch"), ("staging", "staging-v2"), ("requests", "requests-v2") })
+    Check(ScienceMutableCustodyContract.RootPath(@"F:\q\science", item.Item1, 2) == @"F:\q\science\" + item.Item2, "020G-path-" + item.Item1);
+Reject(() => ScienceMutableCustodyContract.Namespaces(3), "020G-version-reject");
+Reject(() => ScienceMutableCustodyContract.RootPath(@"F:\q\science", "owner", 1), "020G-v1-v2-isolation");
+Reject(() => ScienceMutableCustodyContract.RootPath(@"F:\q\science", "../escape", 2), "020G-path-escape");
 Check(ScienceServiceDaclPolicy.ServiceSid(name) == sid, "native-service-sid-control");
 foreach (var target in ScienceServiceDaclPolicy.Targets)
 {
