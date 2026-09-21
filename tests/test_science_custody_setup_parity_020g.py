@@ -60,6 +60,11 @@ class SetupNative:
     def default_aces(self):
         return self.default
 
+    def creation_defaults(self):
+        return dict(owner=USER, group=USER, control=0x8C14, protected=False,
+                    aces=tuple((t, 0, m, sid) for t, _, m, sid in self.default),
+                    labels=((0, 1, b.HIGH),))
+
     def exists(self, path):
         self.hook("exists", path)
         return n._path_key(path) in self.objects
@@ -102,8 +107,22 @@ class SetupNative:
     def inherited_create(self, path):
         self.hook("create", path)
         n._require(n._path_key(path) not in self.objects, "Already exists; never restamp")
-        self.add(path)
+        kind = next(k for k in s.KINDS if n._path_key(b.namespace_path(ROOT, k)) == n._path_key(path))
+        sec = initial_security()
+        if kind in {"owner", "derived", "scratch"}:
+            sec = replace(sec, **dict(self.creation_defaults(), labels=(), control=0x8C04))
+        self.add(path, sec)
         self.actions.append(("create", str(path)))
+        return dict(api="CreateDirectoryW", boolResult=True, winerror=0, securityAttributes=None)
+
+    def labeled_create(self, path):
+        self.hook("create", path)
+        n._require(n._path_key(path) not in self.objects, "Already exists; never restamp")
+        self.add(path, replace(initial_security(), **self.creation_defaults()))
+        self.actions.append(("create", str(path)))
+        self.hook("labeled_created", path)
+        return dict(api="CreateDirectoryW", boolResult=True, winerror=0,
+                    securityAttributes=dict(sddl=s.LABEL_ONLY, handleInherit=False))
 
     def require_empty(self, h):
         self.hook("empty", h)

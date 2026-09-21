@@ -24,6 +24,9 @@ SYNCHRONIZE = 0x100000
 SET_SECURITY_INFORMATION = 0x80000017
 KINDS = (mutable.COMMON, "owner", "derived", "scratch", "staging", "requests")
 MUTATION = 0xD0156 | 0x50000000  # Native mutations plus generic write/all.
+NESTED_KINDS = frozenset({"owner", "derived", "scratch"})
+LABEL_ONLY = "S:(ML;;NW;;;HI)"
+INTERMEDIATE_CONTROL = 0x8C14
 
 
 @dataclass(frozen=True)
@@ -84,8 +87,80 @@ class _SetupNative(_Native):
 
     def inherited_create(self, path):
         # NULL SECURITY_ATTRIBUTES requests inheritance, never a NULL DACL.
-        if not self.k.CreateDirectoryW(_io_path(path), None):
-            raise storage._windows_error("Create fresh setup directory", c.get_last_error())
+        return self._create_directory(path, None, None)
+
+    def _create_directory(self, path, attributes, carrier):
+        ok = bool(self.k.CreateDirectoryW(_io_path(path), attributes))
+        error = 0 if ok else c.get_last_error()
+        receipt = dict(api="CreateDirectoryW", boolResult=ok, winerror=error,
+                       securityAttributes=carrier)
+        if not ok:
+            failure = storage._windows_error("Create fresh setup directory", error)
+            failure.creation_receipt = receipt
+            raise failure
+        return receipt
+
+    def validate_label_carrier(self, sd):
+        w = self.w
+        control, revision = w.WORD(), w.DWORD()
+        self.checked(self.a.GetSecurityDescriptorControl(sd, c.byref(control), c.byref(revision)), "Carrier control")
+        _require(revision.value == 1 and control.value == 0x8010,
+                 "Carrier must contain only its explicit mandatory label.")
+        for name in ("Owner", "Group"):
+            value, defaulted = c.c_void_p(), w.BOOL()
+            self.checked(getattr(self.a, "GetSecurityDescriptor" + name)(
+                sd, c.byref(value), c.byref(defaulted)), "Carrier " + name)
+            _require(not value.value and not defaulted.value, "Carrier supplies owner/group.")
+        dacl, present, defaulted = c.c_void_p(), w.BOOL(), w.BOOL()
+        self.checked(self.a.GetSecurityDescriptorDacl(sd, c.byref(present), c.byref(dacl), c.byref(defaulted)), "Carrier DACL")
+        _require(not present.value and not dacl.value and not defaulted.value, "Carrier supplies a DACL.")
+        sacl = c.c_void_p()
+        self.checked(self.a.GetSecurityDescriptorSacl(sd, c.byref(present), c.byref(sacl), c.byref(defaulted)), "Carrier SACL")
+        _require(present.value and sacl.value and not defaulted.value, "Carrier label missing.")
+        _require(c.cast(sacl.value + 4, c.POINTER(w.WORD))[0] == 1,
+                 "Carrier must contain exactly one mandatory label.")
+        ace = c.c_void_p()
+        self.checked(self.a.GetAce(sacl, 0, c.byref(ace)), "Carrier label ACE")
+        typ, flags = c.string_at(ace, 2)
+        mask = c.cast(ace.value + 4, c.POINTER(w.DWORD))[0]
+        _require(typ == 0x11 and flags == 0 and mask == 1 and self.sid(ace.value + 8) == mutable.HIGH,
+                 "Carrier must be exactly noninheritable HIGH/NO_WRITE_UP.")
+
+    def labeled_create(self, path):
+        with self.security_attributes(LABEL_ONLY) as sa:
+            sd = sa._obj.descriptor
+            self.validate_label_carrier(sd)
+            raw = c.string_at(sd, self.a.GetSecurityDescriptorLength(sd))
+            return self._create_directory(path, sa, dict(sddl=LABEL_ONLY,
+                binarySdHex=raw.hex(), binarySdSha256=hashlib.sha256(raw).hexdigest(),
+                handleInherit=False, labelSecurityInformation=0x10))
+
+    def creation_defaults(self):
+        token = self.w.HANDLE()
+        self.checked(self.a.OpenProcessToken(self.k.GetCurrentProcess(), 8, c.byref(token)), "Open creation-default token")
+        try:
+            result = {}
+            for name, info_class in (("owner", 4), ("group", 5)):
+                size = self.w.DWORD()
+                self.a.GetTokenInformation(token, info_class, None, 0, c.byref(size))
+                _require(0 < size.value <= 128 * 1024, "Invalid default identity length.")
+                buf = c.create_string_buffer(size.value)
+                self.checked(self.a.GetTokenInformation(token, info_class, buf, len(buf), c.byref(size)), "Read creation " + name)
+                result[name] = self.sid(c.cast(buf, c.POINTER(c.c_void_p))[0])
+        finally:
+            self.checked(self.k.CloseHandle(token), "Close creation-default token")
+        class Mapping(c.Structure):
+            _fields_ = [(k, self.w.DWORD) for k in ("read", "write", "execute", "all")]
+        mapping = Mapping(0x120089, 0x120116, 0x1200A0, 0x1F01FF)
+        self.bind(self.a, "MapGenericMask", [c.POINTER(self.w.DWORD), c.POINTER(Mapping)], None)
+        aces = []
+        for typ, flags, mask, sid in self.default_aces():
+            _require(typ in {0, 1} and flags == 0, "Unqualified token-default ACE inheritance.")
+            concrete = self.w.DWORD(mask)
+            self.a.MapGenericMask(c.byref(concrete), c.byref(mapping))
+            aces.append((typ, flags, concrete.value, sid))
+        return dict(**result, aces=tuple(aces), protected=False, control=INTERMEDIATE_CONTROL,
+                    labels=((0, 1, mutable.HIGH),))
 
     def default_aces(self):
         token = self.w.HANDLE()
@@ -156,7 +231,10 @@ class _SetupNative(_Native):
             error = self.a.SetSecurityInfo(handle.value, 1, SET_SECURITY_INFORMATION,
                                            owner, group, dacl, sacl)
             if error != 0:  # DWORD error, not BOOL/GetLastError.
-                raise storage._windows_error("Apply fixed-parent policy", error)
+                failure = storage._windows_error("Apply fixed-parent policy", error)
+                failure.assignment_receipt = dict(api="SetSecurityInfo", securityInformation=SET_SECURITY_INFORMATION,
+                                                  dwordResult=int(error))
+                raise failure
             return error
         finally:
             self.k.LocalFree(sd)
@@ -178,7 +256,13 @@ def provision_mutable_parents(state_root: str, science_sid: str, *,
              "Setup requires approved ancestry and a durable evidence sink.")
     native = _SetupNative()
     pinned, handles, created, closure = [], [], [], []
-    before = kind = current = current_identity = current_owned = None
+    before = kind = current = current_identity = current_owned = current_path = None
+    defaults = None
+    events = []
+    sink = record
+    def record(row):
+        events.append(row)
+        sink(row)
     succeeded = False
 
     def inspect(handle, path):
@@ -194,6 +278,8 @@ def provision_mutable_parents(state_root: str, science_sid: str, *,
         handles.append(handle)
         if active_parent:
             current = handle
+        record(dict(stage="HANDLE_ATTEMPT", path=str(path), requested=access, share=3,
+                    granted="UNAVAILABLE_UNTIL_QUERY", flags="UNAVAILABLE_UNTIL_QUERY"))
         granted, flags = native.granted_access(handle), native.handle_flags(handle)
         # The sealed Arm-B synchronous handle granted SYNCHRONIZE in addition
         # to the requested 0xE0080. No other grant or handle flag is accepted.
@@ -242,7 +328,7 @@ def provision_mutable_parents(state_root: str, science_sid: str, *,
         raw = attempt("descriptorBytes", lambda: native.descriptor_bytes(current))
         differences = policy_difference(sec, science_sid, kind) if sec is not None else None
         return dict(stage="FAILURE_BEFORE_HANDLE_CLOSURE", parentClass=kind,
-                    path=str(current.path) if current is not None else None,
+                    path=str(current_path) if current_path is not None else None,
                     objectIdentity=identity,
                     retainedDirectoryIdentityProven=bool(identity is not None and path_ok and info is not None
                         and info.dwFileAttributes & DIRECTORY and not info.dwFileAttributes & REPARSE),
@@ -263,6 +349,10 @@ def provision_mutable_parents(state_root: str, science_sid: str, *,
                  "Only the already-authorized elevated setup owner may provision fixed parents.")
         trusted = {before["user"], "S-1-5-18", "S-1-5-32-544"}
         _safe_grants(native.default_aces(), trusted)
+        defaults = native.creation_defaults()
+        _safe_grants(defaults["aces"], trusted)
+        _require(defaults["owner"] in trusted, "Untrusted creation-default owner.")
+        record(dict(stage="CREATION_DEFAULTS", expectedNestedIntermediate=defaults))
         for bound in sorted(approved_ancestry, key=lambda x: len(PureWindowsPath(x.path).parts)):
             handle = retain(Path(bound.path), mutable.PARENT_ACCESS)
             sec, identity = inspect(handle, handle.path)
@@ -287,22 +377,50 @@ def provision_mutable_parents(state_root: str, science_sid: str, *,
         result = {}
         for kind, path in paths.items():
             current = current_identity = current_owned = None
+            current_path = path
             recheck()
             if not existing[kind]:
-                native.inherited_create(path)
+                _require(kind not in NESTED_KINDS or mutable.COMMON in result,
+                         "Nested parent requires finalized admitted common parent.")
+                record(dict(stage="CREATE_ATTEMPT", parentClass=kind, path=str(path),
+                            api="CreateDirectoryW", labelOnly=kind in NESTED_KINDS))
+                try:
+                    creation = native.labeled_create(path) if kind in NESTED_KINDS else native.inherited_create(path)
+                except BaseException as exc:
+                    record(dict(stage="CREATE_FAILED", parentClass=kind, path=str(path),
+                                result=getattr(exc, "creation_receipt", None),
+                                unavailable=None if hasattr(exc, "creation_receipt") else "NATIVE_RETURN_UNAVAILABLE"))
+                    raise
                 current_owned = dict(parentClass=kind, path=str(path), identity=None)
                 created.append(current_owned)
-                record(dict(stage="CREATE", path=str(path), boolResult=True, securityAttributes=None))
+                record(dict(stage="CREATE", parentClass=kind, path=str(path), **creation))
                 retain(path, SETUP_ACCESS, active_parent=True)
                 sec, current_identity = observation(current, "CREATED_INHERITED")
                 created[-1]["identity"] = current_identity
+                if kind in NESTED_KINDS:
+                    differences = [dict(field=k, expected=v, actual=getattr(sec, k))
+                                   for k, v in defaults.items() if getattr(sec, k) != v]
+                    record(dict(stage="INTERMEDIATE_READBACK", parentClass=kind, path=str(path),
+                        objectIdentity=current_identity, expectedDescriptor=defaults, actualDescriptor=asdict(sec),
+                        firstDifferingField=differences[0]["field"] if differences else None,
+                        allDifferingFields=differences))
                 _safe_parent(sec, trusted)
+                if kind in NESTED_KINDS:
+                    _require(not differences, "Nested creation intermediate security differs from exact setup defaults/label.")
                 native.require_empty(current)
                 recheck()
                 immediate, immediate_identity = inspect(current, path)
                 _require(immediate_identity == current_identity and immediate.digest == sec.digest,
                          "Created setup object/security replaced.")
-                code = native.apply_policy(current, mutable.parent_sddl(science_sid, kind))
+                record(dict(stage="SET_SECURITY_INFO_ATTEMPT", parentClass=kind, objectIdentity=current_identity,
+                            securityInformation=SET_SECURITY_INFORMATION))
+                try:
+                    code = native.apply_policy(current, mutable.parent_sddl(science_sid, kind))
+                except BaseException as exc:
+                    record(dict(stage="SET_SECURITY_INFO_FAILED", parentClass=kind, objectIdentity=current_identity,
+                                result=getattr(exc, "assignment_receipt", None),
+                                unavailable=None if hasattr(exc, "assignment_receipt") else "NATIVE_RETURN_UNAVAILABLE"))
+                    raise
                 record(dict(stage="SET_SECURITY_INFO", parentClass=kind, objectIdentity=current_identity,
                             securityInformation=SET_SECURITY_INFORMATION, dwordResult=code))
             else:
@@ -320,6 +438,8 @@ def provision_mutable_parents(state_root: str, science_sid: str, *,
             pinned.append((current, bound))
             result[kind] = bound
         recheck()
+        record(dict(stage="ADMISSION_READY", bindings=[asdict(result[k]) for k in KINDS],
+                    installerPrivilegeRestorationStillRequired=True))
         succeeded = True
         return MutableParentsProvisioned(mutable.PROFILE, mutable.VERSION, result[mutable.COMMON],
                                          tuple(result[k] for k in sorted(mutable.KINDS)))
@@ -360,6 +480,14 @@ def provision_mutable_parents(state_root: str, science_sid: str, *,
                     tokenUnchanged=before is not None and after == before,
                     privilegeRestoration="INSTALL_OWNER_MUST_RESTORE_BEFORE_ADMISSION",
                     ownedObjects=created, ownedObjectDisposition="PRESERVED_FOR_INSTALL_OWNER_IDENTITY_BOUND_CLEANUP",
+                    parentClass=kind, path=str(current_path) if current_path is not None else None,
+                    fileId=current_identity, expectedIntermediateDescriptor=defaults if kind in NESTED_KINDS else None,
+                    expectedFinalDescriptor=mutable.parent_sddl(science_sid, kind) if kind else None,
+                    apiSequence=[r for r in events if r["stage"] in {"CREATE_ATTEMPT", "CREATE", "CREATE_FAILED", "HANDLE_ATTEMPT", "HANDLE", "SET_SECURITY_INFO_ATTEMPT", "SET_SECURITY_INFO_FAILED", "SET_SECURITY_INFO"}],
+                    intermediateNativeDescriptors=[r for r in events if r["stage"] in {"CREATED_INHERITED", "INTERMEDIATE_READBACK"}],
+                    privilegeStateBefore="EXTERNAL_INSTALL_OWNER_RECEIPT_REQUIRED",
+                    privilegeStateDuring=before, privilegeStateAfter=after,
+                    externalPrivilegeRestoration="UNAVAILABLE_TO_PRODUCT; REQUIRE_INSTALL_OWNER_FINALLY_RECEIPT",
                     cleanupErrors=[str(x) for x in errors]))
         if errors:
             raise errors[0]
