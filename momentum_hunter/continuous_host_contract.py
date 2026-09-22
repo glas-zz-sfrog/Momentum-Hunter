@@ -5,7 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
-from pathlib import Path
+from pathlib import Path, PureWindowsPath
 import re
 import sys
 from typing import Mapping
@@ -324,10 +324,14 @@ def science_custody_policy(config: Mapping):
         for binding in policy.roots:
             if policy.version == 2:
                 from momentum_hunter.science_mutable_policy import namespace_path
-                expected = absolute_root(namespace_path(str(root), binding.namespace))
+                # Decode cannot inspect another actor's restricted leaf. Native
+                # custody admission pins and verifies its current path/security.
+                expected = PureWindowsPath(namespace_path(str(root), binding.namespace))
+                actual = PureWindowsPath(binding.path)
             else:
                 expected = root / "reader" / "cursors" if binding.namespace == "cursors" else root / binding.namespace
-            if absolute_root(binding.path) != expected:
+                actual = absolute_root(binding.path)
+            if actual != expected:
                 raise HostConfigurationError("Science007 namespace differs from fixed host custody role.")
         if policy.actor_profile is not None:
             from momentum_hunter.windows_writer_profile import validate_profile_paths
