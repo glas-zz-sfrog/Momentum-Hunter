@@ -10,10 +10,11 @@ import zipfile
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from pathlib import Path
-from typing import Mapping
+from typing import Mapping, TYPE_CHECKING
 
-from momentum_hunter.broad_discovery import DiscoverySnapshot
-from momentum_hunter.continuous_tradeplan_producer import CurrentMarketEvidence
+if TYPE_CHECKING:
+    from momentum_hunter.broad_discovery import DiscoverySnapshot
+    from momentum_hunter.continuous_tradeplan_producer import CurrentMarketEvidence
 
 
 PROFILE = "OFFLINE_PRESERVED_PROVIDER_REPLAY"
@@ -309,6 +310,10 @@ class PreservedProviderReplay:
 
 
 def load_preserved_provider_replay(path: Path) -> PreservedProviderReplay:
+    # Configuration admission reads the package identity without running replay.
+    from momentum_hunter.broad_discovery import DiscoverySnapshot
+    from momentum_hunter.continuous_tradeplan_producer import CurrentMarketEvidence
+
     package_path = path.resolve(strict=True)
     package_bytes = package_path.read_bytes()
     package_sha = _sha256(package_bytes)

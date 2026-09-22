@@ -45,14 +45,6 @@ from pathlib import Path, PurePath
 from typing import TYPE_CHECKING, Any, Mapping
 from zoneinfo import ZoneInfo
 
-from momentum_hunter.continuous_live_qualification import (
-    LiveCompositionSource,
-    LiveDenominatorSource,
-    LiveDiscoverySource,
-    LiveMaterialEvents,
-    LiveMarketDataSource,
-    QualificationState,
-)
 from momentum_hunter.continuous_runtime import (
     WRITER_CORRECTNESS_FAILED,
     EXECUTION_AUTHORITY_NONE,
@@ -110,6 +102,7 @@ from momentum_hunter.continuous_host_lifecycle import (
 )
 
 if TYPE_CHECKING:
+    from momentum_hunter.continuous_live_qualification import QualificationState
     from momentum_hunter.windows_science_custody import ScienceCustodyPolicy
 
 _diagnostic_stage("MODULE_IMPORT_EXIT")
@@ -1203,6 +1196,16 @@ def run_runtime(config_path: Path, stop=None, host=None) -> int:
 
 
 def _run_runtime(config: Mapping[str, Any], resources: ExitStack, stop=None, host=None) -> int:
+    # Writer and Science configuration admission must not initialize provider paths.
+    from momentum_hunter.continuous_live_qualification import (
+        LiveCompositionSource,
+        LiveDenominatorSource,
+        LiveDiscoverySource,
+        LiveMaterialEvents,
+        LiveMarketDataSource,
+        QualificationState,
+    )
+
     stop = stop or threading.Event()
     runtime_root = Path(str(config["runtimeStateRoot"]))
     runtime_root.mkdir(parents=True, exist_ok=True)

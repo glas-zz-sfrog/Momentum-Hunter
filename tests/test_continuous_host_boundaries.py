@@ -181,7 +181,7 @@ class HostBoundaryTests(unittest.TestCase):
     def test_replay_wrong_package_fails_before_sources(self):
         path = Path(self.config["offlineInput"]["packagePath"])
         path.write_bytes(b"not an accepted replay")
-        with patch.object(production, "LiveDiscoverySource") as discovery, patch.object(production, "LiveMarketDataSource") as market:
+        with patch("momentum_hunter.continuous_live_qualification.LiveDiscoverySource") as discovery, patch("momentum_hunter.continuous_live_qualification.LiveMarketDataSource") as market:
             with self.assertRaises(ValueError): lifecycle.retained_inputs(self.config)
             discovery.assert_not_called()
             market.assert_not_called()
