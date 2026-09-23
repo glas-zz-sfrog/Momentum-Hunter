@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 from pathlib import Path
 from tempfile import TemporaryDirectory
 import threading
+import time
 from types import SimpleNamespace
 import unittest
 from unittest.mock import MagicMock, patch
@@ -50,6 +52,8 @@ class ScienceReadinessTrace020YTests(unittest.TestCase):
 
     def rows(self, trace):
         trace.close()
+        if hasattr(trace, "_thread") and trace._thread is not None:
+            trace._thread.join(timeout=2)
         path = Path(self.config["logRoot"]) / "science" / f"readiness-trace-{GENERATION}.jsonl"
         return [json.loads(line) for line in path.read_text(encoding="ascii").splitlines()]
 
@@ -78,6 +82,10 @@ class ScienceReadinessTrace020YTests(unittest.TestCase):
         self.assertTrue(rows[-2]["normalized_ids"])
         self.assertEqual(0, rows[-1]["lost_events"])
         self.assertEqual(0, self.health()["lost_events"])
+        self.assertEqual(len(rows), self.health()["written_events"])
+        trace_path = Path(self.config["logRoot"]) / "science" / f"readiness-trace-{GENERATION}.jsonl"
+        self.assertEqual(hashlib.sha256(trace_path.read_bytes()).hexdigest().upper(),
+                         self.health()["trace_sha256"])
 
     def test_absent_publication_emits_no_arrival_or_normalization(self):
         trace = self.trace()
@@ -122,8 +130,9 @@ class ScienceReadinessTrace020YTests(unittest.TestCase):
         recorder = self.recorder(trace)
         with patch("momentum_hunter.science_readiness_trace_020y.os.write", side_effect=OSError("diagnostic write")):
             result = recorder.poll()
+            trace.close()
+            trace._thread.join(timeout=2)
         self.assertEqual(1, result["admitted"])
-        trace.close()
         self.assertGreater(self.health()["lost_events"], 0)
         self.assertEqual("HEALTHY", science_state(result["coverage"]))
 
@@ -131,8 +140,9 @@ class ScienceReadinessTrace020YTests(unittest.TestCase):
         path = self.root / "trace.jsonl"
         with patch("momentum_hunter.science_readiness_trace_020y.os.open", side_effect=OSError("open")):
             unavailable = ScienceReadinessTrace(path, GENERATION)
-        unavailable("source_observed")
-        unavailable.close()
+            unavailable("source_observed")
+            unavailable.close()
+            unavailable._thread.join(timeout=2)
         self.assertGreater(unavailable.lost_events, 0)
 
         working = ScienceReadinessTrace(self.root / "working.jsonl", GENERATION)
@@ -144,8 +154,83 @@ class ScienceReadinessTrace020YTests(unittest.TestCase):
         with patch("momentum_hunter.science_readiness_trace_020y.os.fsync", side_effect=OSError("flush")), \
              patch("momentum_hunter.science_readiness_trace_020y.os.close", side_effect=close_then_fail):
             working.close()
+            working._thread.join(timeout=2)
         self.assertGreaterEqual(working.lost_events, 2)
-        self.assertEqual("CLOSE:OSError", working.last_error)
+        self.assertEqual("HEALTH:OSError", working.last_error)
+
+    def test_blocked_diagnostic_write_never_blocks_admission_or_shutdown(self):
+        path = self.root / "blocked.jsonl"
+        publication(self.published, start_envelope_v2(), 1)
+        entered, release = threading.Event(), threading.Event()
+        real_write = os.write
+        def blocked_write(handle, raw):
+            entered.set()
+            self.assertTrue(release.wait(timeout=2))
+            return real_write(handle, raw)
+        with patch("momentum_hunter.science_readiness_trace_020y.os.write", side_effect=blocked_write):
+            trace = ScienceReadinessTrace(path, GENERATION)
+            started = time.monotonic()
+            trace("source_observed", raw_id="bounded")
+            self.assertLess(time.monotonic() - started, 0.25)
+            self.assertTrue(entered.wait(timeout=2))
+            recorder = self.recorder(trace)
+            started = time.monotonic()
+            result = recorder.poll()
+            self.assertEqual(1, result["admitted"])
+            self.assertEqual("HEALTHY", science_state(result["coverage"]))
+            self.assertLess(time.monotonic() - started, 1.5)
+            started = time.monotonic()
+            trace.close()
+            self.assertLess(time.monotonic() - started, 0.8)
+            release.set()
+            trace._thread.join(timeout=2)
+        self.assertFalse(trace._thread.is_alive())
+        health = json.loads((self.root / "blocked-health.json").read_text(encoding="ascii"))
+        self.assertEqual(0, health["lost_events"])
+        self.assertEqual(health["trace_bytes"], path.stat().st_size)
+
+    def test_full_queue_reports_loss_without_waiting_for_diagnostic_sink(self):
+        path = self.root / "full.jsonl"
+        entered, release = threading.Event(), threading.Event()
+        real_write = os.write
+        def blocked_write(handle, raw):
+            entered.set()
+            self.assertTrue(release.wait(timeout=2))
+            return real_write(handle, raw)
+        with patch("momentum_hunter.science_readiness_trace_020y.os.write", side_effect=blocked_write):
+            trace = ScienceReadinessTrace(path, GENERATION)
+            trace("source_observed")
+            self.assertTrue(entered.wait(timeout=2))
+            started = time.monotonic()
+            for _ in range(150):
+                trace("science_status", state="STARTING")
+            self.assertLess(time.monotonic() - started, 0.5)
+            self.assertGreater(trace.lost_events, 0)
+            trace.close()
+            release.set()
+            trace._thread.join(timeout=2)
+        self.assertFalse(trace._thread.is_alive())
+        self.assertGreater(json.loads((self.root / "full-health.json").read_text(encoding="ascii"))["lost_events"], 0)
+
+    def test_health_sync_failure_never_creates_a_clean_final_health_receipt(self):
+        path = self.root / "health-fail.jsonl"
+        real_fsync = os.fsync
+        calls = 0
+        def fail_health_sync(handle):
+            nonlocal calls
+            calls += 1
+            if calls == 2:
+                raise OSError("health fsync")
+            return real_fsync(handle)
+        with patch("momentum_hunter.science_readiness_trace_020y.os.fsync", side_effect=fail_health_sync):
+            trace = ScienceReadinessTrace(path, GENERATION)
+            trace("source_observed")
+            trace.close()
+            trace._thread.join(timeout=2)
+        self.assertFalse(trace.health_committed)
+        self.assertFalse((self.root / "health-fail-health.json").exists())
+        self.assertTrue((self.root / "health-fail-health.json.partial").exists())
+        self.assertEqual("HEALTH:OSError", trace.last_error)
 
     def test_recovered_counts_do_not_claim_new_lineage(self):
         config = {**self.config,
@@ -187,6 +272,41 @@ class ScienceReadinessTrace020YTests(unittest.TestCase):
         self.assertEqual(1, snapshot[0]["raw_arrival_count"])
         self.assertEqual("STOPPED", statuses[-1][0])
         self.assertEqual(0, self.health()["lost_events"])
+
+    def test_storage_close_failure_still_finalizes_trace(self):
+        (self.root / "logs" / "science").mkdir(parents=True)
+        config = {**self.config,
+                  "host": {"instanceId": "qual-015-020y-focused",
+                           "shutdownSeconds": 10,
+                           "science": {"maxItems": 1, "pollSeconds": 0,
+                                       "stateRoot": str(self.science)}},
+                  "researchFactExportV2": {"exportRoot": str(self.root / "producer")},
+                  "runtimeBuildHash": SOURCE_ROOT_IDENTITY,
+                  "hostFingerprint": "focused-test"}
+        host = SimpleNamespace(generation=GENERATION, status=lambda state, **detail: None)
+        storage = MagicMock()
+        storage.backend.security_contract_evidence = {
+            "profile": "TEST", "policy_sha256": "test", "role": "science",
+            "token": {}, "exact_owner_dacl_label_policy_verified": True}
+        storage.close.side_effect = OSError("storage close failure")
+        traces = []
+        def capture_trace(cfg, *, generation):
+            trace = open_020y_trace(cfg, generation=generation)
+            traces.append(trace)
+            return trace
+        with patch.object(lifecycle, "upstream_generations", return_value={"writer": "w", "runtime": "r"}), \
+             patch.object(lifecycle, "open_host_science_storage", return_value=storage), \
+             patch("momentum_hunter.strategy_science_continuous_recorder.ContinuousScienceRecorder",
+                   side_effect=ValueError("recorder open failure")), \
+             patch("momentum_hunter.science_readiness_trace_020y.open_020y_trace",
+                   side_effect=capture_trace):
+            with self.assertRaisesRegex(OSError, "storage close failure"):
+                lifecycle.run_science(config, threading.Event(), host)
+        self.assertEqual(1, storage.close.call_count)
+        self.assertEqual(1, len(traces))
+        traces[0]._thread.join(timeout=2)
+        self.assertTrue(traces[0].health_committed)
+        self.assertEqual("trace_closed", self.rows(traces[0])[-1]["event"])
 
     def test_trace_is_absent_outside_exact_qualification_family(self):
         self.config["host"]["instanceId"] = "production"

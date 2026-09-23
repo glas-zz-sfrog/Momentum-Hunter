@@ -183,11 +183,13 @@ def run_science(config, stop: threading.Event, host):
         return 3 if recoverable else 2
     finally:
         try:
-            if recorder is not None:
-                recorder.close()
+            try:
+                if recorder is not None:
+                    recorder.close()
+            finally:
+                if storage_set is not None:
+                    storage_set.close()
         finally:
-            if storage_set is not None:
-                storage_set.close()
             try:
                 if trace is not None:
                     trace.close()
