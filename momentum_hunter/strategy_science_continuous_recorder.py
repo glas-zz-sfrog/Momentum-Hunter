@@ -77,7 +77,7 @@ class ContinuousScienceRecorder:
         self, publication_root: Path, science_root: Path, *,
         source_root_identity: str, writer_instance_id: str,
         clock: Callable[[], str], lateness_seconds: int | None = None,
-        custody_storage_set=None,
+        custody_storage_set=None, readiness_trace=None,
     ) -> None:
         self.publication_root = Path(publication_root).resolve(strict=True)
         self.science_root = Path(science_root).resolve()
@@ -98,6 +98,7 @@ class ContinuousScienceRecorder:
         ):
             raise ContinuousRecorderError("Lateness policy must be explicit nonnegative seconds.")
         self._clock = clock
+        self._readiness_trace = readiness_trace
         self._closed = False
         self._events: list[dict[str, object]] = []
         self._hashes: list[str] = []
@@ -217,6 +218,13 @@ class ContinuousScienceRecorder:
         value = self._clock()
         parse_rfc3339(value, "Science physical clock")
         return value
+
+    def _trace_first(self, event: str, publication_file: str, **detail: object) -> None:
+        if self._readiness_trace is None:
+            return
+        match = PUBLICATION_FILE.fullmatch(publication_file)
+        if match is not None and int(match.group("ordinal")) == 1:
+            self._readiness_trace(event, publication_file=publication_file, **detail)
 
     @staticmethod
     def _crash(requested: str | None, phase: str) -> None:
@@ -374,6 +382,8 @@ class ContinuousScienceRecorder:
     def _stage(self, raw: bytes, kind: str, publication_file: str,
                crash_phase: str | None, *, count_duplicate: bool) -> dict[str, object]:
         digest = sha256_hex(raw)
+        if kind == "PUBLICATION":
+            self._trace_first("source_observed", publication_file, raw_id=digest)
         arrival = self._arrival_by_delivery.get((kind, digest, publication_file))
         if arrival is not None:
             if count_duplicate:
@@ -404,6 +414,9 @@ class ContinuousScienceRecorder:
         self._reindex()
         self._crash(crash_phase, "after_arrival")
         self._mark_persistence(arrival_id, recovery=False)
+        if kind == "PUBLICATION":
+            self._trace_first("raw_persisted", publication_file, raw_id=digest,
+                              arrival_id=arrival_id, source_id=meta.get("source_event_id"))
         self._crash(crash_phase, "after_persistence_marker")
         return self._arrivals[arrival_id]
 
@@ -494,18 +507,30 @@ class ContinuousScienceRecorder:
                                  "next_observed": meta["source_sequence"]})
                     break
                 try:
+                    self._trace_first("normalization_started", path.name,
+                                      source_id=meta.get("source_event_id"),
+                                      raw_id=arrival["raw_sha256"], arrival_id=arrival["arrival_id"])
                     result = self.reader.admit(
                         self.raw_bytes(arrival["arrival_id"]), publication_ordinal=expected,
                         publication_file=path.name,
                         crash_phase=crash_phase if crash_phase in {"after_custody_before_cursor", "after_cursor_commit"} else None,
                     )
                 except Exception as exc:
+                    self._trace_first("normalization_failed", path.name,
+                                      source_id=meta.get("source_event_id"),
+                                      raw_id=arrival["raw_sha256"], error_type=type(exc).__name__)
                     if self._storage_interruption(exc):
                         raise
                     self._append("REJECTED", {"arrival_id": arrival["arrival_id"], "reason": str(exc)})
                     self._reindex()
                     raise ContinuousRecorderError("Canonical admission rejected preserved raw input.") from exc
+                self._trace_first("normalization_completed", path.name,
+                                  source_id=meta.get("source_event_id"), raw_id=arrival["raw_sha256"],
+                                  normalized_ids=list(result.custody.record_ids))
                 self._support.apply_records(self.reader.last_delta)
+                self._trace_first("normalized_observed", path.name,
+                                  source_id=meta.get("source_event_id"), raw_id=arrival["raw_sha256"],
+                                  normalized_ids=list(result.custody.record_ids))
                 self._crash(crash_phase, "after_admission")
                 self._append("ADMITTED", {"arrival_id": arrival["arrival_id"],
                              "checkpoint_sha256": result.custody.checkpoint_sha256,

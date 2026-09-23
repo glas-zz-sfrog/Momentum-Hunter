@@ -78,16 +78,24 @@ def run_science(config, stop: threading.Event, host):
     published = Path(config["researchFactExportV2"]["exportRoot"]) / "published"
     recorder, storage_set, coverage, bound = None, None, {}, None
     trace = None
+    readiness_trace = None
     custody_evidence = None
     quiet = 0
     stop_deadline = None
     def status(state, **extra):
         host.status(state, coverage=coverage, dependencies=bound or {},
-                    custodyBoundary=custody_evidence, **extra)
+                     custodyBoundary=custody_evidence, **extra)
+        if readiness_trace is not None:
+            readiness_trace("science_status", state=state,
+                raw_arrival_count=coverage.get("raw_arrival_count", 0),
+                normalized_record_count=coverage.get("normalized_record_count", 0),
+                admitted_arrival_count=coverage.get("admitted_arrival_count", 0))
     try:
         status("STARTING")
         from momentum_hunter.science_custody_trace_020u import open_020u_trace
         trace = open_020u_trace(config, role="science", generation=host.generation)
+        from momentum_hunter.science_readiness_trace_020y import open_020y_trace
+        readiness_trace = open_020y_trace(config, generation=host.generation)
         while True:
             if stop.is_set() and stop_deadline is None:
                 stop_deadline = time.monotonic() + config["host"]["shutdownSeconds"]
@@ -119,7 +127,7 @@ def run_science(config, stop: threading.Event, host):
                     science_root=Path(settings["stateRoot"]), source_root_identity=config["runtimeBuildHash"],
                     writer_instance_id=config["host"]["instanceId"] + "-science-" + host.generation,
                     clock=lambda: datetime.now(timezone.utc).isoformat(),
-                    custody_storage_set=storage_set)
+                    custody_storage_set=storage_set, readiness_trace=readiness_trace)
                 # Canonical cold recovery/audit, not erasure of the earlier failure receipt.
                 coverage = health_coverage(recorder.coverage())
             result = recorder.poll(max_items=settings["maxItems"])
@@ -173,6 +181,8 @@ def run_science(config, stop: threading.Event, host):
                 storage_set.close()
             if trace is not None:
                 trace.close()
+            if readiness_trace is not None:
+                readiness_trace.close()
 
 
 def retained_inputs(config, checkpoint=None):
