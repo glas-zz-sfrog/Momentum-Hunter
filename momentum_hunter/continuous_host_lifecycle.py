@@ -52,7 +52,7 @@ def upstream_generations(config, role):
             for key in {"writer": (), "runtime": ("writer",), "science": ("writer", "runtime")}[role]}
 
 
-def open_host_science_storage(config):
+def open_host_science_storage(config, *, trace_hook=None):
     from momentum_hunter.windows_science_custody import open_science_custody_backend
     from momentum_hunter.science_custody_mailbox import ScienceCustodyMailboxClient
     from momentum_hunter.science_custody_readonly import ScienceCustodyStorageSet
@@ -61,7 +61,8 @@ def open_host_science_storage(config):
     backend = open_science_custody_backend(policy, role="science")
     try:
         client = ScienceCustodyMailboxClient(policy_sha256=policy.policy_sha256,
-            source_root_identity=policy.source_root_identity, mailbox_backend=backend)
+            source_root_identity=policy.source_root_identity, mailbox_backend=backend,
+            trace_hook=trace_hook)
         return ScienceCustodyStorageSet(client,
             recovery_clock=lambda: datetime.now(timezone.utc).isoformat())
     except BaseException:
@@ -76,6 +77,7 @@ def run_science(config, stop: threading.Event, host):
     settings = config["host"]["science"]
     published = Path(config["researchFactExportV2"]["exportRoot"]) / "published"
     recorder, storage_set, coverage, bound = None, None, {}, None
+    trace = None
     custody_evidence = None
     quiet = 0
     stop_deadline = None
@@ -84,6 +86,8 @@ def run_science(config, stop: threading.Event, host):
                     custodyBoundary=custody_evidence, **extra)
     try:
         status("STARTING")
+        from momentum_hunter.science_custody_trace_020u import open_020u_trace
+        trace = open_020u_trace(config, role="science", generation=host.generation)
         while True:
             if stop.is_set() and stop_deadline is None:
                 stop_deadline = time.monotonic() + config["host"]["shutdownSeconds"]
@@ -106,7 +110,7 @@ def run_science(config, stop: threading.Event, host):
                     time.sleep(settings["pollSeconds"])
                     continue
                 status("RECOVERING", auditRequired=True)
-                storage_set = open_host_science_storage(config)
+                storage_set = open_host_science_storage(config, trace_hook=trace)
                 native = storage_set.backend.security_contract_evidence
                 custody_evidence = {"profile": native["profile"], "policySha256": native["policy_sha256"],
                     "role": native["role"], "token": native["token"],
@@ -167,6 +171,8 @@ def run_science(config, stop: threading.Event, host):
         finally:
             if storage_set is not None:
                 storage_set.close()
+            if trace is not None:
+                trace.close()
 
 
 def retained_inputs(config, checkpoint=None):

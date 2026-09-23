@@ -285,12 +285,12 @@ def deployment_configuration_fingerprint(config: Mapping[str, Any]) -> str:
     return _runtime_config(config).fingerprint
 
 
-def _open_science_custody_writer(policy: ScienceCustodyPolicy):
+def _open_science_custody_writer(policy: ScienceCustodyPolicy, *, trace_hook=None):
     # Import and native root/account validation occur only in the opted-in
     # Science thread. Production configuration and IPC credentials are not inputs.
     from momentum_hunter.windows_science_custody import open_science_custody_writer
 
-    return open_science_custody_writer(policy)
+    return open_science_custody_writer(policy, trace_hook=trace_hook)
 
 
 class _ScienceCustodyWorker:
@@ -305,8 +305,9 @@ class _ScienceCustodyWorker:
     POLL_INTERVAL_SECONDS = 0.05
     STOP_WAIT_SECONDS = 0.25
 
-    def __init__(self, policy: ScienceCustodyPolicy) -> None:
+    def __init__(self, policy: ScienceCustodyPolicy, *, trace_hook=None) -> None:
         self._policy = policy
+        self._trace_hook = trace_hook
         self._stop = threading.Event()
         self._status_lock = threading.Lock()
         self._status: dict[str, object] = {
@@ -358,7 +359,8 @@ class _ScienceCustodyWorker:
         try:
             from momentum_hunter.science_custody_commit import CustodyCommitPending
 
-            channel = _open_science_custody_writer(self._policy)
+            channel = (_open_science_custody_writer(self._policy) if self._trace_hook is None
+                       else _open_science_custody_writer(self._policy, trace_hook=self._trace_hook))
             self._set_status(state="READY")
             while not self._stop.is_set():
                 self._set_status(state="POLLING", inFlight=True)
@@ -385,13 +387,17 @@ class _ScienceCustodyWorker:
             self._increment("errorCount")
             self._set_status(state="FAILED", lastError=type(exc).__name__)
         finally:
-            if channel is not None:
-                try:
+            try:
+                if channel is not None:
                     channel.close()
-                except Exception as exc:
-                    failed = True
-                    self._increment("errorCount")
-                    self._set_status(state="CLOSE_FAILED", lastError=type(exc).__name__)
+            except Exception as exc:
+                failed = True
+                self._increment("errorCount")
+                self._set_status(state="CLOSE_FAILED", lastError=type(exc).__name__)
+            finally:
+                close_trace = getattr(self._trace_hook, "close", None)
+                if close_trace is not None:
+                    close_trace()
             if not failed:
                 self._set_status(state="STOPPED", inFlight=False)
 
@@ -403,6 +409,7 @@ class ProductionWriterServer:
         self, config: Mapping[str, Any], *,
         science_custody_policy: ScienceCustodyPolicy | None = None,
         native_writer_admission=None,
+        custody_trace_hook=None,
     ) -> None:
         self.config = config
         self._native_writer_admission = native_writer_admission
@@ -430,7 +437,7 @@ class ProductionWriterServer:
         # native backend, open roots, construct synchronization, or start a timer.
         self._science_custody_worker = (
             None if science_custody_policy is None
-            else _ScienceCustodyWorker(science_custody_policy)
+            else _ScienceCustodyWorker(science_custody_policy, trace_hook=custody_trace_hook)
         )
 
     @property
@@ -1132,20 +1139,28 @@ def _write_runtime_status(path: Path, health: RuntimeHealth | None, *, state: st
 def run_writer(config_path: Path, stop=None, host=None) -> int:
     config = _read_config(config_path)
     policy = science_custody_policy(config)
+    from momentum_hunter.science_custody_trace_020u import open_020u_trace
+    trace = open_020u_trace(config, role="writer", generation=host.generation if host else "")
     from momentum_hunter.windows_writer_profile import NativeWriterAdmission
-    admission = None if policy is None else NativeWriterAdmission(config, policy)
+    admission = None
     server = None
     complete = False
     try:
-        server = ProductionWriterServer(config, science_custody_policy=policy, native_writer_admission=admission)
+        admission = None if policy is None else NativeWriterAdmission(config, policy)
+        server = ProductionWriterServer(config, science_custody_policy=policy,
+                                        native_writer_admission=admission, custody_trace_hook=trace)
         complete = server.serve_forever(str(config["ipcHost"]), int(config["ipcPort"]), stop, host)
     finally:
         try:
             if server is not None:
                 server.close()
         finally:
-            if admission is not None:
-                admission.close()
+            try:
+                if admission is not None:
+                    admission.close()
+            finally:
+                if trace is not None and server is None:
+                    trace.close()
     custody = server.science_custody_status
     custody_closed = custody["state"] in ("DISABLED", "STOPPED") and not custody["threadAlive"]
     complete = bool(complete and custody_closed)

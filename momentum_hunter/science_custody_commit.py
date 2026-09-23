@@ -445,13 +445,29 @@ def _evidence(value: CustodyObjectEvidence, *, maximum: int) -> CustodyObjectEvi
 
 
 class ScienceCustodyFinalizer:
-    def __init__(self, backend: CustodyCommitBackend, *, fault_hook: Callable[[str], None] | None = None):
+    def __init__(self, backend: CustodyCommitBackend, *, fault_hook: Callable[[str], None] | None = None,
+                 trace_hook: Callable[[dict[str, object]], None] | None = None):
         _hash(backend.policy_sha256)
         _hash(backend.source_root_identity)
         _integer(backend.max_artifact_bytes, minimum=1)
         _integer(backend.max_request_bytes, minimum=1, maximum=MAX_REQUEST_BYTES)
         self.backend = backend
         self._fault_hook = fault_hook
+        self._trace_hook = trace_hook
+
+    def _trace(self, request, event, relative, *, evidence=None, created=None, error=None):
+        if self._trace_hook is None:
+            return
+        self._trace_hook({
+            "event": event, "identity_sha256": request.identity.digest(),
+            "request_sha256": request.request_digest(), "generation": request.generation,
+            "relative_path": relative,
+            "result": "ERROR" if error is not None else (
+                "BEGIN" if event.endswith("_begin") else "MISSING" if evidence is None else "PRESENT"),
+            "file_identity": None if evidence is None else [str(part) for part in evidence.file_identity],
+            "sha256": None if evidence is None else sha256(evidence.raw),
+            "created": created, "error_class": None if error is None else type(error).__name__,
+        })
 
     def _fault(self, phase):
         if self._fault_hook is not None:
@@ -589,8 +605,20 @@ class ScienceCustodyFinalizer:
         })
 
     def _existing(self, request, claim_info, *, recover_dependencies=False):
-        evidence = self._read("receipts", receipt_path(request.identity.digest()), MAX_REQUEST_BYTES)
-        completion = self._read("receipts", completion_path(request.identity.digest()), MAX_REQUEST_BYTES)
+        receipt_relative = receipt_path(request.identity.digest())
+        completion_relative = completion_path(request.identity.digest())
+        try:
+            evidence = self._read("receipts", receipt_relative, MAX_REQUEST_BYTES)
+        except Exception as exc:
+            self._trace(request, "receipt_read", receipt_relative, error=exc)
+            raise
+        self._trace(request, "receipt_read", receipt_relative, evidence=evidence)
+        try:
+            completion = self._read("receipts", completion_relative, MAX_REQUEST_BYTES)
+        except Exception as exc:
+            self._trace(request, "completion_read", completion_relative, error=exc)
+            raise
+        self._trace(request, "completion_read", completion_relative, evidence=completion)
         if evidence is None:
             if completion is not None:
                 raise CustodyCommitIntegrityError("Completion exists without its exact receipt.")
@@ -612,6 +640,7 @@ class ScienceCustodyFinalizer:
 
     def lookup(self, request: CustodyCommitRequest) -> CustodyCommitResult | None:
         request = self._validate_request(request)
+        self._trace(request, "lookup_begin", completion_path(request.identity.digest()))
         with self.backend.transaction():
             return self._existing(request, self._claim(request))
 
@@ -698,15 +727,25 @@ class ScienceCustodyFinalizer:
             self._verify_final(request, final, recover_dependencies=True)
             receipt = self._receipt_for(request, claim_info, final)
             self._fault("before_receipt")
-            _, persisted = self.backend.create_trusted("receipts", receipt_path(request.identity.digest()), receipt.to_bytes())
-            if _evidence(persisted, maximum=MAX_REQUEST_BYTES).raw != receipt.to_bytes():
+            receipt_relative = receipt_path(request.identity.digest())
+            self._trace(request, "receipt_create_begin", receipt_relative)
+            receipt_created, persisted = self.backend.create_trusted("receipts", receipt_relative, receipt.to_bytes())
+            persisted = _evidence(persisted, maximum=MAX_REQUEST_BYTES)
+            self._trace(request, "receipt_create_result", receipt_relative,
+                        evidence=persisted, created=receipt_created)
+            if persisted.raw != receipt.to_bytes():
                 raise CustodyCommitIntegrityError("Concurrent durable receipt differs.")
             self._fault("before_completion")
             # This announces three already-completed barriers. Its own loss
             # means Pending/reconfirmation, never premature cleanup authority.
             completion = self._completion_bytes(request, claim_info, final, persisted)
-            _, announced = self.backend.publish_completion(completion_path(request.identity.digest()), completion)
-            if _evidence(announced, maximum=MAX_REQUEST_BYTES).raw != completion:
+            completion_relative = completion_path(request.identity.digest())
+            self._trace(request, "completion_create_begin", completion_relative)
+            completion_created, announced = self.backend.publish_completion(completion_relative, completion)
+            announced = _evidence(announced, maximum=MAX_REQUEST_BYTES)
+            self._trace(request, "completion_create_result", completion_relative,
+                        evidence=announced, created=completion_created)
+            if announced.raw != completion:
                 raise CustodyCommitIntegrityError("Concurrent completion differs.")
             self._fault("after_receipt")
             verified = self._existing(request, claim_info)

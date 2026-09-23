@@ -93,8 +93,9 @@ class ScienceCustodyMailboxWriter:
 
 class ScienceCustodyMailboxClient:
     def __init__(self, *, policy_sha256: str, source_root_identity: str,
-                 mailbox_backend: CustodyMailboxBackend,
-                 fault_hook: Callable[[str], None] | None = None):
+                  mailbox_backend: CustodyMailboxBackend,
+                  fault_hook: Callable[[str], None] | None = None,
+                  trace_hook: Callable[[dict[str, object]], None] | None = None):
         if (policy_sha256 != mailbox_backend.policy_sha256
                 or source_root_identity != mailbox_backend.source_root_identity):
             raise CustodyCommitError("Client does not match the native policy binding.")
@@ -102,7 +103,7 @@ class ScienceCustodyMailboxClient:
         self.mailbox_backend = mailbox_backend
         self.policy_sha256 = policy_sha256
         self.source_root_identity = source_root_identity
-        self._reader = ScienceCustodyFinalizer(mailbox_backend)
+        self._reader = ScienceCustodyFinalizer(mailbox_backend, trace_hook=trace_hook)
         self._fault_hook = fault_hook
 
     def _fault(self, phase):

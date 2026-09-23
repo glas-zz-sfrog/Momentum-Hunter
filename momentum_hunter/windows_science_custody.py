@@ -1339,7 +1339,7 @@ class _WriterChannel:
         self._backend.close()
 
 
-def open_science_custody_writer(policy: ScienceCustodyPolicy):
+def open_science_custody_writer(policy: ScienceCustodyPolicy, *, trace_hook=None):
     """Production Writer entry point: never accepts a fake/injected backend."""
     _require(type(policy) is ScienceCustodyPolicy, "Explicit immutable Writer policy required.")
     from momentum_hunter.science_custody_commit import ScienceCustodyFinalizer
@@ -1347,7 +1347,7 @@ def open_science_custody_writer(policy: ScienceCustodyPolicy):
     backend = WindowsScienceCustodyBackend(policy, role="writer")
     try:
         return _WriterChannel(backend, ScienceCustodyMailboxWriter(
-            ScienceCustodyFinalizer(backend), mailbox_backend=backend))
+            ScienceCustodyFinalizer(backend, trace_hook=trace_hook), mailbox_backend=backend))
     except BaseException:
         backend.close()
         raise
