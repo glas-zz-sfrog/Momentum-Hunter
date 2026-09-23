@@ -3,6 +3,7 @@
 from contextlib import contextmanager
 from dataclasses import replace
 from concurrent.futures import ThreadPoolExecutor
+import json
 import threading
 import unittest
 
@@ -266,6 +267,67 @@ class CommitProtocolTests(unittest.TestCase):
         del backend.objects["claims", claim_path(request.identity.digest())]
         with self.assertRaises(CustodyCommitIntegrityError):
             finalizer.lookup(request)
+
+    def test_claim_published_between_claim_and_receipt_reads(self):
+        backend = MemoryBackend()
+        request = request_for(backend)
+        read_trusted = backend.read_trusted
+        published = False
+
+        def publish_after_missing_claim(namespace, relative, *, maximum):
+            nonlocal published
+            result = read_trusted(namespace, relative, maximum=maximum)
+            if namespace == "claims" and result is None and not published:
+                published = True
+                ScienceCustodyFinalizer(backend).finalize(request)
+            return result
+
+        backend.read_trusted = publish_after_missing_claim
+        result = ScienceCustodyFinalizer(backend).lookup(request)
+        self.assertTrue(published)
+        self.assertIsNotNone(result)
+        self.assertEqual(request.request_digest(), result.receipt.original_request_sha256)
+        self.assertIn(("claims", claim_path(request.identity.digest())), backend.objects)
+        self.assertIn(("receipts", receipt_path(request.identity.digest())), backend.objects)
+
+    def test_late_claim_recheck_rejects_invalid_claims(self):
+        for case in ("missing", "wrong_identity", "wrong_generation", "stale", "substituted"):
+            with self.subTest(case=case):
+                backend = MemoryBackend()
+                request = request_for(backend)
+                ScienceCustodyFinalizer(backend).finalize(request)
+                key = "claims", claim_path(request.identity.digest())
+                original = backend.objects[key]
+                if case == "missing":
+                    del backend.objects[key]
+                elif case == "substituted":
+                    backend._new(*key, original.raw)
+                else:
+                    claim = json.loads(original.raw)
+                    if case == "wrong_identity":
+                        other = request_for(backend, sequence=2, generation="2" * 32)
+                    elif case == "wrong_generation":
+                        other = replace(request, generation="2" * 32, staging_name="2" * 32 + ".stage")
+                    else:
+                        other = request_for(backend, text="stale", generation="3" * 32)
+                    claim["request"] = json.loads(other.to_bytes())
+                    claim["request_sha256"] = other.request_digest()
+                    backend.objects[key] = replace(original, raw=canonical_protocol_bytes(claim))
+
+                read_trusted = backend.read_trusted
+                first_claim = True
+
+                def hide_first_claim(namespace, relative, *, maximum):
+                    nonlocal first_claim
+                    if namespace == "claims" and first_claim:
+                        first_claim = False
+                        return None
+                    return read_trusted(namespace, relative, maximum=maximum)
+
+                backend.read_trusted = hide_first_claim
+                with self.assertRaises((CustodyCommitIntegrityError, CustodyCommitConflict)):
+                    ScienceCustodyFinalizer(backend).lookup(request)
+                self.assertFalse(first_claim)
 
     def test_actual_pinned_bytes_must_match_before_claim(self):
         backend = MemoryBackend()

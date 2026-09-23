@@ -624,7 +624,10 @@ class ScienceCustodyFinalizer:
                 raise CustodyCommitIntegrityError("Completion exists without its exact receipt.")
             return None
         if claim_info is None:
-            raise CustodyCommitIntegrityError("Receipt exists without its immutable claim.")
+            # Writer may publish the claim and receipt after our first claim read.
+            claim_info = self._claim(request)
+            if claim_info is None:
+                raise CustodyCommitIntegrityError("Receipt exists without its immutable claim.")
         receipt = CustodyCommitReceipt.from_bytes(evidence.raw)
         final = self._read(request.final_root, request.final_relative_path, self.backend.max_artifact_bytes)
         if final is None:
