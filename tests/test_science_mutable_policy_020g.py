@@ -145,6 +145,17 @@ class BackendTests(unittest.TestCase):
         self.assertIn("owner-lease", str(value._lease.path))
         self.assertEqual(value.policy.profile, b.PROFILE)
 
+    def test_receipt_read_share_while_writer_publish_handle_is_open(self):
+        value = self.backend()
+        for namespace in ("receipts", "claims"):
+            path = value.namespace_root(namespace) / "exact.json"
+            self.n.add(path, kind="trusted", raw=b"receipt").security = security("trusted")
+            self.assertEqual(value.read_trusted(namespace, "exact.json", maximum=7).raw, b"receipt")
+            opened = [(p, opts) for p, opts in self.n.opens if mod._path_key(p) == mod._path_key(path)]
+            self.assertEqual(len(opened), 1)
+            self.assertEqual(opened[0][1]["access"], mod.READ)
+            self.assertEqual(opened[0][1]["share"], 7 if namespace == "receipts" else 1)
+
     def test_successful_open_is_not_proof_of_exact_granted_rights(self):
         self.n.grant_override = b.OWNER_LEASE_ACCESS | 0x100
         with self.assertRaisesRegex(mod.ScienceCustodyNativeError, "granted handle rights"):
