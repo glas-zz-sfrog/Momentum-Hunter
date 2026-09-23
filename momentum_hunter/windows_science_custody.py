@@ -1029,12 +1029,12 @@ class WindowsScienceCustodyBackend:
         handoff = (self.role == "writer" and self.policy.actor_profile is not None
                    and namespace in TRANSPORT)
         try:
-            # Receipt bytes are fixed before rename; the Writer may still hold
-            # its write/delete handle for flush and readback. Completion remains
-            # the separate durability gate for accepting those bytes.
+            # Trusted claim/receipt bytes are fixed before rename; the Writer
+            # may still hold its write/delete handle for flush and readback.
+            # Completion remains the separate durability gate for acceptance.
             narrow = self.policy.version == mutable.VERSION and namespace in TRANSPORT
             handle = self._native.open(path, access=0x120081 if handoff or narrow else READ,
-                                       share=5 if handoff else (7 if namespace == "receipts" else 1))
+                                       share=5 if handoff else (7 if namespace in {"claims", "receipts"} else 1))
         except OSError as exc:
             if missing and exc.winerror == 2:
                 return None

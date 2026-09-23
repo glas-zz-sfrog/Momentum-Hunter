@@ -19,6 +19,7 @@ from momentum_hunter.strategy_science_source_reader import _ReaderLock, SourceRe
 from tests.test_science_custody_windows_007 import NativeDouble, Handle, winerror, policy as legacy_policy
 from tests.test_windows_writer_profile_016d import role_profile, token
 
+NATIVE_WINDOWS = mod._Native
 SCIENCE = actors.service_sid(role_profile().science.service_name)
 PARAMS = SimpleNamespace(science_sid=SCIENCE, writer_sid=b.WRITER, actor_profile=role_profile(),
                          object_integrity_sid=b.HIGH, version=2)
@@ -145,16 +146,50 @@ class BackendTests(unittest.TestCase):
         self.assertIn("owner-lease", str(value._lease.path))
         self.assertEqual(value.policy.profile, b.PROFILE)
 
-    def test_receipt_read_share_while_writer_publish_handle_is_open(self):
+    def test_claim_and_receipt_read_share_while_writer_publish_handle_is_open(self):
         value = self.backend()
-        for namespace in ("receipts", "claims"):
+        for namespace in ("receipts", "claims", "custody"):
             path = value.namespace_root(namespace) / "exact.json"
             self.n.add(path, kind="trusted", raw=b"receipt").security = security("trusted")
             self.assertEqual(value.read_trusted(namespace, "exact.json", maximum=7).raw, b"receipt")
             opened = [(p, opts) for p, opts in self.n.opens if mod._path_key(p) == mod._path_key(path)]
             self.assertEqual(len(opened), 1)
             self.assertEqual(opened[0][1]["access"], mod.READ)
-            self.assertEqual(opened[0][1]["share"], 7 if namespace == "receipts" else 1)
+            self.assertEqual(opened[0][1]["share"], 7 if namespace in {"claims", "receipts"} else 1)
+
+    @unittest.skipUnless(os.name == "nt", "Requires native Windows sharing")
+    def test_native_claim_publication_reader_and_exclusive_conflict(self):
+        native = NATIVE_WINDOWS()
+        with tempfile.TemporaryDirectory(prefix="argus-020v-claim-") as directory:
+            temporary = Path(directory) / "private.tmp"
+            claim = Path(directory) / "claim.json"
+            writer = native.open(temporary, access=0xC0030000, share=1, disposition=1)
+            try:
+                native.write(writer, b"claim")
+                native.rename(writer, claim)
+                with self.assertRaises(OSError) as old:
+                    native.open(claim, access=mod.READ, share=1)
+                self.assertEqual(old.exception.winerror, 32)
+                reader = native.open(claim, access=mod.READ, share=7)
+                try:
+                    self.assertEqual(native.identity(reader), native.identity(writer))
+                    self.assertEqual(native.read(reader, 5), b"claim")
+                finally:
+                    reader.close()
+            finally:
+                writer.close()
+            after_close = native.open(claim, access=mod.READ, share=1)
+            try:
+                self.assertEqual(native.read(after_close, 5), b"claim")
+            finally:
+                after_close.close()
+            exclusive = native.open(claim, access=mod.READ, share=0)
+            try:
+                with self.assertRaises(OSError) as conflict:
+                    native.open(claim, access=mod.READ, share=7)
+                self.assertEqual(conflict.exception.winerror, 32)
+            finally:
+                exclusive.close()
 
     def test_successful_open_is_not_proof_of_exact_granted_rights(self):
         self.n.grant_override = b.OWNER_LEASE_ACCESS | 0x100
