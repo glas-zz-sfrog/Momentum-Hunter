@@ -14,7 +14,7 @@ from collections.abc import Sequence
 
 from .canonical import canonical_json_bytes
 
-from .verified_reads import VerifiedReads, VerifiedReadError, _directory_identity, _identity
+from .verified_reads import VerifiedReads, VerifiedReadError, _directory_identity, _identity, _operation_path
 from .namespace_changes import DirectoryChanges
 
 
@@ -104,7 +104,7 @@ class ReusableViews:
         # including an empty channel. Record that owned API delta as well as
         # parents of files; never accept an arbitrary notified directory here.
         parent = self.storage.root / Path(relative)
-        while parent != self.storage.root and parent.is_dir():
+        while parent != self.storage.root and _operation_path(parent).is_dir():
             self.directories[parent] = _directory_identity(parent)
             parent = parent.parent
 

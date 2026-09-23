@@ -64,7 +64,7 @@ from .reusable_views import (
     ReusableViews, HistoryView, custody_operation, reusable_view, continuous_public_operation,
     build_incremental_support,
 )
-from .verified_reads import VerifiedReads, VerifiedReadError
+from .verified_reads import VerifiedReads, VerifiedReadError, _logical_path, _operation_path
 
 
 TOPOLOGY_VERSION = 1
@@ -389,7 +389,7 @@ class StrategyScienceRecorder:
 
         before = [
             {
-                "byte_length": path.stat().st_size,
+                "byte_length": _operation_path(path).stat().st_size,
                 "partial_name": path.name,
                 "sha256": sha256_hex(self._read_raw(path)),
             }
@@ -403,7 +403,7 @@ class StrategyScienceRecorder:
             return
         after = [
             {
-                "byte_length": path.stat().st_size,
+                "byte_length": _operation_path(path).stat().st_size,
                 "quarantine_name": path.name,
                 "sha256": sha256_hex(self._read_raw(path)),
             }
@@ -453,8 +453,8 @@ class StrategyScienceRecorder:
                 if canonical_json_bytes(self._views.json[path]) != raw:
                     raise RecorderRecoveryError('Derived JSON differs from its exact raw authority.')
                 return self._views.json[path], raw
-            stat = path.stat(follow_symlinks=False)
-            if path.is_symlink() or stat.st_nlink != 1:
+            stat = _operation_path(path).stat(follow_symlinks=False)
+            if _operation_path(path).is_symlink() or stat.st_nlink != 1:
                 raise RecorderRecoveryError(
                     f"Persisted {label} is a reparse/link alias rather than one custody file."
                 )
@@ -470,7 +470,7 @@ class StrategyScienceRecorder:
         if self._views is not None and self._views.depth and relative.parts[0] == 'sessions':
             raw = self._views.reads.read(path)
         else:
-            raw = path.read_bytes()
+            raw = _operation_path(path).read_bytes()
         if confirmed is not None and raw != confirmed:
             raise RecorderRecoveryError('Recovered raw differs from confirmed custody.')
         return raw
@@ -493,7 +493,9 @@ class StrategyScienceRecorder:
 
     def _relative(self, path: Path) -> str:
         try:
-            return path.resolve().relative_to(self._storage.root.resolve()).as_posix()
+            resolved = _logical_path(_operation_path(path).resolve())
+            root = _logical_path(_operation_path(self._storage.root).resolve())
+            return resolved.relative_to(root).as_posix()
         except (OSError, ValueError) as exc:
             raise RecorderRecoveryError("Evidence path escaped the configured Science root.") from exc
 
@@ -3047,8 +3049,8 @@ class StrategyScienceRecorder:
         partition = self._locate_partition(session_id)
         partition_path = self._storage.root / Path(partition)
         try:
-            partition_resolved = partition_path.resolve(strict=True)
-            partition_resolved.relative_to(self._storage.root.resolve(strict=True))
+            partition_resolved = _logical_path(_operation_path(partition_path).resolve(strict=True))
+            partition_resolved.relative_to(_logical_path(_operation_path(self._storage.root).resolve(strict=True)))
         except (OSError, ValueError) as exc:
             raise RecorderRecoveryError("Session partition escapes the configured custody root.") from exc
         allowed_suffixes = (
@@ -3063,22 +3065,23 @@ class StrategyScienceRecorder:
         )
         unexpected = [
             path
-            for path in partition_path.rglob("*")
-            if path.is_file() and not path.name.endswith(allowed_suffixes)
+            for path in (_logical_path(item) for item in _operation_path(partition_path, recursive=True).rglob("*"))
+            if _operation_path(path).is_file() and not path.name.endswith(allowed_suffixes)
         ]
         if unexpected:
             raise RecorderRecoveryError(
                 f"Unknown evidence object in session partition: {unexpected[0].name}."
             )
-        for path in partition_path.rglob("*"):
-            if not path.is_file():
+        for item in _operation_path(partition_path, recursive=True).rglob("*"):
+            path = _logical_path(item)
+            if not _operation_path(path).is_file():
                 continue
             try:
-                path.resolve(strict=True).relative_to(partition_resolved)
-                stat = path.stat(follow_symlinks=False)
+                _logical_path(_operation_path(path).resolve(strict=True)).relative_to(partition_resolved)
+                stat = _operation_path(path).stat(follow_symlinks=False)
             except (OSError, ValueError) as exc:
                 raise RecorderRecoveryError("Evidence object escapes its session partition.") from exc
-            if path.is_symlink() or stat.st_nlink != 1:
+            if _operation_path(path).is_symlink() or stat.st_nlink != 1:
                 raise RecorderRecoveryError(
                     "Evidence object is a reparse/link alias rather than one custody file."
                 )
@@ -3572,7 +3575,7 @@ class StrategyScienceRecorder:
         unique_paths = sorted(set(artifact_paths), key=self._relative)
         inventory = [
             {
-                "byte_length": path.stat().st_size,
+                "byte_length": _operation_path(path).stat().st_size,
                 "relative_path": self._relative(path),
                 "sha256": sha256_hex(self._read_raw(path)),
             }

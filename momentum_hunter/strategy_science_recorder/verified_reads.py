@@ -55,6 +55,24 @@ class _FileInfo(ct.Structure):
 _unretired_requests: list[object] = []
 
 
+def _operation_path(path: Path, *, recursive: bool = False) -> Path:
+    """Use extended DOS spelling only for long Windows filesystem calls."""
+    path = Path(path)
+    value = str(path)
+    if (os.name != "nt" or (len(value) < 260 and not recursive) or value.startswith("\\\\?\\")
+            or len(value) < 3 or value[1:3] != ":\\" or not value[0].isalpha()):
+        return path
+    return Path("\\\\?\\" + value)
+
+
+def _logical_path(path: Path) -> Path:
+    value = str(path)
+    if (os.name == "nt" and len(value) >= 7 and value.startswith("\\\\?\\")
+            and value[5:7] == ":\\" and value[4].isalpha()):
+        return Path(value[4:])
+    return Path(path)
+
+
 def _kernel():
     if os.name != "nt":
         raise VerifiedReadError("Optimized raw-read reuse requires proven local Windows R oplocks.")
@@ -169,7 +187,7 @@ class _ReadLease:
         self.overlapped = _Overlapped()
         try:
             # GENERIC_READ, all sharing, OPEN_EXISTING, OVERLAPPED|OPEN_REPARSE_POINT.
-            self.handle = kernel.CreateFileW(str(path), 0x80000000, 7, None, 3, 0x40200000, None)
+            self.handle = kernel.CreateFileW(str(_operation_path(path)), 0x80000000, 7, None, 3, 0x40200000, None)
             if self.handle == wt.HANDLE(-1).value:
                 self.handle = None
                 raise VerifiedReadError(f"Raw read handle unavailable: WinError {ct.get_last_error()}.")
@@ -240,14 +258,14 @@ class _ReadLease:
 
 
 def _identity(path: Path) -> tuple[int, ...]:
-    value = path.stat(follow_symlinks=False)
+    value = _operation_path(path).stat(follow_symlinks=False)
     if not stat.S_ISREG(value.st_mode) or value.st_nlink != 1 or getattr(value, "st_file_attributes", 0) & 0x400:
         raise VerifiedReadError("Raw evidence is not one regular, non-reparse custody file.")
     return (value.st_dev, value.st_ino, value.st_size, value.st_mtime_ns, value.st_ctime_ns, value.st_nlink)
 
 
 def _directory_identity(path: Path) -> tuple[int, int]:
-    value = path.stat(follow_symlinks=False)
+    value = _operation_path(path).stat(follow_symlinks=False)
     if not stat.S_ISDIR(value.st_mode) or getattr(value, 'st_file_attributes', 0) & 0x400:
         raise VerifiedReadError('Guarded raw parent is a reparse/non-directory object.')
     return value.st_dev, value.st_ino
@@ -270,7 +288,7 @@ class VerifiedReads:
     """
 
     def __init__(self, root: Path, *, aggregate_content: bool = False) -> None:
-        self.root = Path(root).resolve(strict=True)
+        self.root = _logical_path(_operation_path(root).resolve(strict=True))
         if str(self.root).startswith("\\\\"):
             raise VerifiedReadError("Remote roots are outside R-oplock qualification.")
         self._kernel = _kernel()
@@ -288,7 +306,7 @@ class VerifiedReads:
         path = Path(path).absolute()
         try:
             path.relative_to(self.root)
-            if path.resolve(strict=True) != path:
+            if _logical_path(_operation_path(path).resolve(strict=True)) != path:
                 raise VerifiedReadError("Raw path alias is outside verified identity.")
             parent = path.parent
             while True:
@@ -386,7 +404,7 @@ class VerifiedReads:
                     # Bind the actual read handle to the guarded object. Stat
                     # before/after alone cannot cover name replacement between
                     # acquisition and opening the subsequent read handle.
-                    with path.open("rb") as stream:
+                    with _operation_path(path).open("rb") as stream:
                         if _handle_identity(self._kernel, msvcrt.get_osfhandle(stream.fileno())) != _handle_identity(self._kernel, lease.handle):
                             raise VerifiedReadError("Read handle differs from R-guarded raw object.")
                         raw = stream.read()
