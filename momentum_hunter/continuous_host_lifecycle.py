@@ -87,6 +87,7 @@ def run_science(config, stop: threading.Event, host):
                      custodyBoundary=custody_evidence, **extra)
         if readiness_trace is not None:
             readiness_trace("science_status", state=state,
+                dependencies=bound or {},
                 raw_arrival_count=coverage.get("raw_arrival_count", 0),
                 normalized_record_count=coverage.get("normalized_record_count", 0),
                 admitted_arrival_count=coverage.get("admitted_arrival_count", 0))
@@ -112,6 +113,8 @@ def run_science(config, stop: threading.Event, host):
                     storage_set = None
                 custody_evidence = None
                 bound, quiet = dependencies, 0
+                if readiness_trace is not None:
+                    readiness_trace("dependency_bound", dependencies=bound)
             if recorder is None:
                 if not all(bound.values()) or not published.is_dir():
                     status("DEGRADED", reason="WAITING_FOR_PRODUCER_PUBLICATION", drainComplete=False)
@@ -130,6 +133,12 @@ def run_science(config, stop: threading.Event, host):
                     custody_storage_set=storage_set, readiness_trace=readiness_trace)
                 # Canonical cold recovery/audit, not erasure of the earlier failure receipt.
                 coverage = health_coverage(recorder.coverage())
+                if readiness_trace is not None:
+                    readiness_trace("recovery_snapshot", dependencies=bound,
+                        raw_arrival_count=coverage.get("raw_arrival_count", 0),
+                        normalized_record_count=coverage.get("normalized_record_count", 0),
+                        admitted_arrival_count=coverage.get("admitted_arrival_count", 0),
+                        historical_lineage="UNKNOWN_WITHOUT_PER_EVENT_TRACE")
             result = recorder.poll(max_items=settings["maxItems"])
             coverage = health_coverage(result["coverage"])
             state = science_state(coverage)
@@ -179,10 +188,12 @@ def run_science(config, stop: threading.Event, host):
         finally:
             if storage_set is not None:
                 storage_set.close()
-            if trace is not None:
-                trace.close()
-            if readiness_trace is not None:
-                readiness_trace.close()
+            try:
+                if trace is not None:
+                    trace.close()
+            finally:
+                if readiness_trace is not None:
+                    readiness_trace.close()
 
 
 def retained_inputs(config, checkpoint=None):

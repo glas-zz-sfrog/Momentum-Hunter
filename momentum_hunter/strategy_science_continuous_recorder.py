@@ -224,7 +224,10 @@ class ContinuousScienceRecorder:
             return
         match = PUBLICATION_FILE.fullmatch(publication_file)
         if match is not None and int(match.group("ordinal")) == 1:
-            self._readiness_trace(event, publication_file=publication_file, **detail)
+            try:
+                self._readiness_trace(event, publication_file=publication_file, **detail)
+            except Exception:
+                pass
 
     @staticmethod
     def _crash(requested: str | None, phase: str) -> None:
@@ -507,7 +510,7 @@ class ContinuousScienceRecorder:
                                  "next_observed": meta["source_sequence"]})
                     break
                 try:
-                    self._trace_first("normalization_started", path.name,
+                    self._trace_first("admission_started", path.name,
                                       source_id=meta.get("source_event_id"),
                                       raw_id=arrival["raw_sha256"], arrival_id=arrival["arrival_id"])
                     result = self.reader.admit(
@@ -516,9 +519,10 @@ class ContinuousScienceRecorder:
                         crash_phase=crash_phase if crash_phase in {"after_custody_before_cursor", "after_cursor_commit"} else None,
                     )
                 except Exception as exc:
-                    self._trace_first("normalization_failed", path.name,
+                    self._trace_first("admission_interrupted", path.name,
                                       source_id=meta.get("source_event_id"),
-                                      raw_id=arrival["raw_sha256"], error_type=type(exc).__name__)
+                                      raw_id=arrival["raw_sha256"], error_type=type(exc).__name__,
+                                      commit_outcome="UNKNOWN")
                     if self._storage_interruption(exc):
                         raise
                     self._append("REJECTED", {"arrival_id": arrival["arrival_id"], "reason": str(exc)})
