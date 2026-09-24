@@ -217,6 +217,24 @@ class DecodedNativeAdmissionTests(unittest.TestCase):
         self.assertTrue(backend._closed)
         self.assertTrue(all(h.closed for h in self.native.handles.values()))
 
+    def test_nested_transaction_rechecks_version_two_root_before_return(self):
+        backend = self.start()
+        with self.assertRaises(custody.ScienceCustodyNativeError):
+            with backend.transaction():
+                with backend.transaction():
+                    self.target().security = replace(self.target().security, control=0x9004)
+        self.assertTrue(backend._closed)
+        self.assertTrue(all(h.closed for h in self.native.handles.values()))
+
+    def test_nested_transaction_rechecks_version_two_actor_before_return(self):
+        backend = self.start()
+        with self.assertRaises(custody.ScienceCustodyNativeError):
+            with backend.transaction():
+                with backend.transaction():
+                    self.native.token_override = token('writer')
+        self.assertTrue(backend._closed)
+        self.assertTrue(all(h.closed for h in self.native.handles.values()))
+
     def test_valid_native_admission_preserves_role_specific_pins(self):
         backend = self.start()
         self.assertTrue(backend._fixed_keys)

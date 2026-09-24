@@ -449,6 +449,38 @@ class NativeBackendFlowTests(unittest.TestCase):
         with self.assertRaises(mod.ScienceCustodyNativeError):
             backend.read_trusted("custody", "x.json", maximum=20)
 
+    def test_nested_transactions_validate_fixed_pins_at_outer_boundaries(self):
+        backend, native = self.make_backend("science")
+        fixed = len(backend._fixed_keys)
+        before = native.security_calls
+        with backend.transaction():
+            with backend.transaction():
+                with backend.transaction():
+                    pass
+        self.assertEqual(2 * fixed, native.security_calls - before)
+        before = native.security_calls
+        with backend.transaction():
+            pass
+        self.assertEqual(fixed, native.security_calls - before)
+
+    def test_nested_transaction_detects_fixed_root_drift_before_return(self):
+        backend, native = self.make_backend("science")
+        root = native.objects[mod._path_key(backend.namespace_root("custody"))]
+        with self.assertRaises(mod.ScienceCustodyNativeError):
+            with backend.transaction():
+                with backend.transaction():
+                    root.identity = (9, 9, 9)
+        self.assertEqual(0, backend._transaction_depth)
+
+    def test_nested_transaction_detects_actor_drift_before_return(self):
+        backend, native = self.make_backend("science")
+        observed = native.token()
+        with self.assertRaises(mod.ScienceCustodyNativeError):
+            with backend.transaction():
+                with backend.transaction():
+                    native.token_override = {**observed, "owner": WRITER}
+        self.assertEqual(0, backend._transaction_depth)
+
     def test_copy_never_reuses_source_object_and_closes_all_file_handles(self):
         backend, native = self.make_backend()
         staged = native.add(backend.namespace_root("staging") / ("a" * 32 + ".stage"),

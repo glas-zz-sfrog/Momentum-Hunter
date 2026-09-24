@@ -700,6 +700,7 @@ class WindowsScienceCustodyBackend:
         self._pins = {}
         self._fixed_keys = frozenset()
         self._transaction_depth = 0
+        self._nested_checks_deferred = False
         self._lease = None
         self._root_evidence = {}
         self._admission = None
@@ -942,13 +943,23 @@ class WindowsScienceCustodyBackend:
     @contextmanager
     def transaction(self) -> Iterator[None]:
         with self._lock:
-            self._check_pins()
+            # Leaf access checks stay per-object; fixed topology checks bracket
+            # the outer operation instead of repeating for every nested read.
+            if self._transaction_depth == 0:
+                self._check_pins()
+                self._nested_checks_deferred = False
+            else:
+                self._nested_checks_deferred = True
             self._transaction_depth += 1
             try:
                 yield
+                if (self._transaction_depth == 1 and self._nested_checks_deferred
+                        and not self._closed):
+                    self._check_pins()
             finally:
                 self._transaction_depth -= 1
                 if self._transaction_depth == 0:
+                    self._nested_checks_deferred = False
                     self._release_dynamic_pins()
 
     def _release_dynamic_pins(self) -> None:
