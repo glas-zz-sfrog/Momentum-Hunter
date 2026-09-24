@@ -14,6 +14,7 @@ import json
 import os
 import re
 import threading
+import time
 from contextlib import contextmanager
 from dataclasses import asdict, dataclass
 from pathlib import Path, PureWindowsPath
@@ -703,6 +704,7 @@ class WindowsScienceCustodyBackend:
         self._lease = None
         self._root_evidence = {}
         self._admission = None
+        self._qualification_pin_timing = None
         try:
             self._actor()
             for item in sorted(policy.ancestors, key=lambda x: len(PureWindowsPath(x.path).parts)):
@@ -827,16 +829,47 @@ class WindowsScienceCustodyBackend:
             raise
 
     def _check_pins_current(self) -> None:
-        _require(not self._closed, "Native custody backend is closed.")
-        _require(self.policy_sha256 == self.policy.policy_sha256, "Immutable policy drift.")
-        self._actor()
-        # Fixed topology is finite policy state. Revalidating all historical
-        # subdirectories here would turn ordinary ingest into a history scan.
-        for key in self._fixed_keys:
-            handle, kind, digest, identity = self._pins[key]
-            sec = self._validate_handle(handle, handle.path, kind=kind, directory=True)
-            _require(sec.digest == digest and self._native.identity(handle) == identity,
-                     "Pinned topology/security changed during the process lifetime.")
+        timing = self._qualification_pin_timing
+        started = time.perf_counter_ns() if timing is not None else 0
+        try:
+            _require(not self._closed, "Native custody backend is closed.")
+            _require(self.policy_sha256 == self.policy.policy_sha256, "Immutable policy drift.")
+            actor_started = time.perf_counter_ns() if timing is not None else 0
+            try:
+                self._actor()
+            finally:
+                if timing is not None:
+                    timing["actor_ns"] += time.perf_counter_ns() - actor_started
+            # Fixed topology is finite policy state. Revalidating all historical
+            # subdirectories here would turn ordinary ingest into a history scan.
+            for key in self._fixed_keys:
+                root_started = time.perf_counter_ns() if timing is not None else 0
+                try:
+                    handle, kind, digest, identity = self._pins[key]
+                    sec = self._validate_handle(handle, handle.path, kind=kind, directory=True)
+                    _require(sec.digest == digest and self._native.identity(handle) == identity,
+                             "Pinned topology/security changed during the process lifetime.")
+                finally:
+                    if timing is not None:
+                        timing["fixed_root_ns"] += time.perf_counter_ns() - root_started
+                        timing["fixed_root_validations"] += 1
+        finally:
+            if timing is not None:
+                timing["pin_check_ns"] += time.perf_counter_ns() - started
+                timing["pin_checks"] += 1
+
+    def enable_qualification_pin_timing(self) -> None:
+        self._qualification_pin_timing = {
+            "pin_checks": 0, "pin_check_ns": 0, "actor_ns": 0,
+            "fixed_root_validations": 0, "fixed_root_ns": 0,
+        }
+
+    def reset_qualification_pin_timing(self) -> None:
+        if self._qualification_pin_timing is not None:
+            self.enable_qualification_pin_timing()
+
+    def qualification_pin_timing(self) -> dict[str, int]:
+        return dict(self._qualification_pin_timing or {})
 
     def _directory(self, namespace: str, parts: tuple[str, ...], *, create: bool = False):
         _require(namespace in self.policy.root_names and not (self.role == "science" and namespace == "private"),

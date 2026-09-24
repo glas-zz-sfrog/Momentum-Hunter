@@ -463,6 +463,24 @@ class NativeBackendFlowTests(unittest.TestCase):
             pass
         self.assertEqual(fixed, native.security_calls - before)
 
+    def test_qualification_timing_observes_without_skipping_nested_checks(self):
+        backend, native = self.make_backend("science")
+        self.assertEqual({}, backend.qualification_pin_timing())
+        backend.enable_qualification_pin_timing()
+        fixed = len(backend._fixed_keys)
+        before = native.security_calls
+        with backend.transaction():
+            with backend.transaction():
+                pass
+        profile = backend.qualification_pin_timing()
+        self.assertEqual(2, profile["pin_checks"])
+        self.assertEqual(2 * fixed, profile["fixed_root_validations"])
+        self.assertEqual(2 * fixed, native.security_calls - before)
+        self.assertGreaterEqual(profile["pin_check_ns"], profile["actor_ns"])
+        self.assertGreaterEqual(profile["pin_check_ns"], profile["fixed_root_ns"])
+        backend.reset_qualification_pin_timing()
+        self.assertEqual(0, backend.qualification_pin_timing()["pin_checks"])
+
     def test_nested_transaction_rejects_fixed_root_drift_before_write(self):
         backend, native = self.make_backend("science")
         root = native.objects[mod._path_key(backend.namespace_root("custody"))]

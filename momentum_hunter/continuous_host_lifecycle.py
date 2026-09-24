@@ -60,6 +60,8 @@ def open_host_science_storage(config, *, trace_hook=None, readiness_trace=None):
     policy = science_custody_policy(config)
     backend = open_science_custody_backend(policy, role="science")
     try:
+        if readiness_trace is not None:
+            backend.enable_qualification_pin_timing()
         client = ScienceCustodyMailboxClient(policy_sha256=policy.policy_sha256,
             source_root_identity=policy.source_root_identity, mailbox_backend=backend,
             trace_hook=trace_hook)
@@ -146,8 +148,21 @@ def run_science(config, stop: threading.Event, host):
                     historical_lineage="UNKNOWN_WITHOUT_PER_EVENT_TRACE")
                 first_poll = True
             if first_poll:
-                with recovery_stage(readiness_trace, "SCIENCE_FIRST_POLL"):
-                    result = recorder.poll(max_items=settings["maxItems"])
+                if readiness_trace is not None:
+                    storage_set.backend.reset_qualification_pin_timing()
+                try:
+                    with recovery_stage(readiness_trace, "SCIENCE_FIRST_POLL"):
+                        result = recorder.poll(max_items=settings["maxItems"])
+                finally:
+                    if readiness_trace is not None:
+                        try:
+                            profile = storage_set.backend.qualification_pin_timing()
+                        except Exception as exc:
+                            emit_readiness_trace(readiness_trace, "SCIENCE_FIRST_POLL_PIN_TIMING_UNAVAILABLE",
+                                                 exception_class=type(exc).__name__)
+                        else:
+                            if type(profile) is dict:
+                                emit_readiness_trace(readiness_trace, "SCIENCE_FIRST_POLL_PIN_TIMING", **profile)
                 first_poll = False
             else:
                 result = recorder.poll(max_items=settings["maxItems"])

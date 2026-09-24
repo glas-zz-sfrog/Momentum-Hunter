@@ -325,6 +325,9 @@ class ScienceReadinessTrace020YTests(unittest.TestCase):
         storage.backend.security_contract_evidence = {
             "profile": "TEST", "policy_sha256": "test", "role": "science",
             "token": {}, "exact_owner_dacl_label_policy_verified": True}
+        storage.backend.qualification_pin_timing.return_value = {
+            "pin_checks": 2, "pin_check_ns": 400, "actor_ns": 100,
+            "fixed_root_validations": 4, "fixed_root_ns": 200}
         with patch.object(lifecycle, "upstream_generations", return_value={"writer": "w", "runtime": "r"}), \
              patch.object(lifecycle, "open_host_science_storage", return_value=storage) as opened_storage, \
              patch.object(lifecycle, "completion", return_value=True), \
@@ -348,7 +351,12 @@ class ScienceReadinessTrace020YTests(unittest.TestCase):
             "SCIENCE_RECORDER_CONSTRUCTION_ENTER", "SCIENCE_RECORDER_CONSTRUCTION_EXIT",
             "SCIENCE_INITIAL_COVERAGE_ENTER", "SCIENCE_INITIAL_COVERAGE_EXIT",
             "SCIENCE_FIRST_POLL_ENTER", "SCIENCE_FIRST_POLL_EXIT",
+            "SCIENCE_FIRST_POLL_PIN_TIMING",
         ], stages)
+        profile = next(row for row in rows if row["event"] == "SCIENCE_FIRST_POLL_PIN_TIMING")
+        self.assertEqual(2, profile["pin_checks"])
+        self.assertEqual(4, profile["fixed_root_validations"])
+        storage.backend.reset_qualification_pin_timing.assert_called_once_with()
         self.assertEqual("STOPPED", statuses[-1][0])
         self.assertEqual(0, self.health()["lost_events"])
 
