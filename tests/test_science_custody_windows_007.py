@@ -449,7 +449,7 @@ class NativeBackendFlowTests(unittest.TestCase):
         with self.assertRaises(mod.ScienceCustodyNativeError):
             backend.read_trusted("custody", "x.json", maximum=20)
 
-    def test_nested_transactions_validate_fixed_pins_at_outer_boundaries(self):
+    def test_nested_transactions_validate_fixed_pins_before_each_operation(self):
         backend, native = self.make_backend("science")
         fixed = len(backend._fixed_keys)
         before = native.security_calls
@@ -457,29 +457,56 @@ class NativeBackendFlowTests(unittest.TestCase):
             with backend.transaction():
                 with backend.transaction():
                     pass
-        self.assertEqual(2 * fixed, native.security_calls - before)
+        self.assertEqual(3 * fixed, native.security_calls - before)
         before = native.security_calls
         with backend.transaction():
             pass
         self.assertEqual(fixed, native.security_calls - before)
 
-    def test_nested_transaction_detects_fixed_root_drift_before_return(self):
+    def test_nested_transaction_rejects_fixed_root_drift_before_write(self):
         backend, native = self.make_backend("science")
+        root = native.objects[mod._path_key(backend.namespace_root("custody"))]
+        target = backend.namespace_root("requests") / "request.json"
+        with self.assertRaises(mod.ScienceCustodyNativeError):
+            with backend.transaction():
+                root.identity = (9, 9, 9)
+                backend.create_transport("requests", "request.json", b"raw")
+        self.assertNotIn(mod._path_key(target), native.objects)
+        self.assertEqual(0, backend._transaction_depth)
+
+    def test_nested_transaction_rejects_actor_drift_before_read(self):
+        backend, native = self.make_backend("science")
+        observed = native.token()
+        target = backend.namespace_root("custody") / "x.json"
+        native.add(target, raw=b"raw")
+        with self.assertRaises(mod.ScienceCustodyNativeError):
+            with backend.transaction():
+                native.token_override = {**observed, "owner": WRITER}
+                backend.read_trusted("custody", "x.json", maximum=20)
+        self.assertEqual(0, backend._transaction_depth)
+
+    def test_nested_writer_publication_rejects_drift_before_rename(self):
+        backend, native = self.make_backend("writer")
         root = native.objects[mod._path_key(backend.namespace_root("custody"))]
         with self.assertRaises(mod.ScienceCustodyNativeError):
             with backend.transaction():
-                with backend.transaction():
-                    root.identity = (9, 9, 9)
-        self.assertEqual(0, backend._transaction_depth)
+                root.identity = (9, 9, 9)
+                backend.create_trusted("custody", "sessions/scope/final.json", b"raw")
+        self.assertEqual([], native.renames)
 
-    def test_nested_transaction_detects_actor_drift_before_return(self):
+    def test_nested_science_cleanup_rejects_drift_before_delete(self):
         backend, native = self.make_backend("science")
-        observed = native.token()
+        name = "a" * 32 + ".stage"
+        staged = native.add(backend.namespace_root("staging") / name,
+                            kind="transport", raw=b"raw")
+        root = native.objects[mod._path_key(backend.namespace_root("custody"))]
         with self.assertRaises(mod.ScienceCustodyNativeError):
             with backend.transaction():
-                with backend.transaction():
-                    native.token_override = {**observed, "owner": WRITER}
-        self.assertEqual(0, backend._transaction_depth)
+                root.identity = (9, 9, 9)
+                backend.delete_transport("staging", name,
+                                         expected_identity=staged.identity,
+                                         expected_sha256=sha256(staged.raw))
+        self.assertEqual([], native.deletes)
 
     def test_copy_never_reuses_source_object_and_closes_all_file_handles(self):
         backend, native = self.make_backend()

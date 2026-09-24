@@ -217,21 +217,21 @@ class DecodedNativeAdmissionTests(unittest.TestCase):
         self.assertTrue(backend._closed)
         self.assertTrue(all(h.closed for h in self.native.handles.values()))
 
-    def test_nested_transaction_rechecks_version_two_root_before_return(self):
+    def test_nested_transaction_checks_version_two_root_before_transport_write(self):
         backend = self.start()
         with self.assertRaises(custody.ScienceCustodyNativeError):
             with backend.transaction():
-                with backend.transaction():
-                    self.target().security = replace(self.target().security, control=0x9004)
+                self.target().security = replace(self.target().security, control=0x9004)
+                backend.create_transport('requests', 'request.json', b'raw')
         self.assertTrue(backend._closed)
         self.assertTrue(all(h.closed for h in self.native.handles.values()))
 
-    def test_nested_transaction_rechecks_version_two_actor_before_return(self):
+    def test_nested_transaction_checks_version_two_actor_before_transport_write(self):
         backend = self.start()
         with self.assertRaises(custody.ScienceCustodyNativeError):
             with backend.transaction():
-                with backend.transaction():
-                    self.native.token_override = token('writer')
+                self.native.token_override = token('writer')
+                backend.create_transport('requests', 'request.json', b'raw')
         self.assertTrue(backend._closed)
         self.assertTrue(all(h.closed for h in self.native.handles.values()))
 
