@@ -15,6 +15,7 @@ from unittest.mock import MagicMock, patch
 
 from momentum_hunter import continuous_host_lifecycle as lifecycle
 from momentum_hunter.continuous_host_lifecycle import science_state
+from momentum_hunter.science_custody_commit import CustodyCommitIntegrityError
 from momentum_hunter.science_readiness_trace_020y import ScienceReadinessTrace, open_020y_trace
 from momentum_hunter.strategy_science_continuous_recorder import ContinuousScienceRecorder
 from momentum_hunter.strategy_science_source_reader import SimulatedSourceReaderCrash
@@ -307,6 +308,26 @@ class ScienceReadinessTrace020YTests(unittest.TestCase):
         traces[0]._thread.join(timeout=2)
         self.assertTrue(traces[0].health_committed)
         self.assertEqual("trace_closed", self.rows(traces[0])[-1]["event"])
+
+    def test_host_failure_receipt_preserves_exact_custody_request(self):
+        (self.root / "logs" / "science").mkdir(parents=True)
+        config = {**self.config,
+                  "host": {"instanceId": "qual-015-020z-focused", "shutdownSeconds": 10,
+                           "science": {"maxItems": 1, "pollSeconds": 0,
+                                       "stateRoot": str(self.science)}},
+                  "researchFactExportV2": {"exportRoot": str(self.root / "producer")},
+                  "runtimeBuildHash": SOURCE_ROOT_IDENTITY,
+                  "hostFingerprint": "focused-test"}
+        host = SimpleNamespace(generation=GENERATION, status=lambda state, **detail: None)
+        failure = CustodyCommitIntegrityError("Completion exists without its exact receipt.")
+        failure.receipt_diagnostic = {"request_id": "a" * 64, "request_digest": "b" * 64,
+                                      "generation": "c" * 32, "receipt_at_failure": {"state": "MISSING"}}
+        with patch.object(lifecycle, "upstream_generations", return_value={"writer": "w", "runtime": "r"}), \
+             patch.object(lifecycle, "open_host_science_storage", side_effect=failure):
+            self.assertEqual(2, lifecycle.run_science(config, threading.Event(), host))
+        path = Path(config["logRoot"]) / "science" / f"failure-{GENERATION}.json"
+        report = json.loads(path.read_bytes())
+        self.assertEqual(failure.receipt_diagnostic, report["receiptDiagnostic"])
 
     def test_trace_is_absent_outside_exact_qualification_family(self):
         self.config["host"]["instanceId"] = "production"

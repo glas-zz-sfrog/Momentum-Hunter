@@ -1,7 +1,7 @@
 """Pure protocol tests. Memory evidence is NOT a Windows security proof."""
 
 from contextlib import contextmanager
-from dataclasses import replace
+from dataclasses import asdict, replace
 from concurrent.futures import ThreadPoolExecutor
 import json
 import threading
@@ -11,7 +11,7 @@ from momentum_hunter.science_custody_commit import (
     CustodyCommitConflict, CustodyCommitError, CustodyCommitIntegrityError,
     CustodyCommitPending, CustodyCommitRequest, CustodyCommitReceipt,
     CustodyObjectEvidence, ScienceCustodyFinalizer, canonical_protocol_bytes,
-    claim_path, identity_for_artifact, receipt_path, sha256, validate_relative_path,
+    claim_path, completion_path, identity_for_artifact, receipt_path, sha256, validate_relative_path,
 )
 from momentum_hunter.strategy_science_recorder.canonical import canonical_json_bytes
 
@@ -289,6 +289,87 @@ class CommitProtocolTests(unittest.TestCase):
         self.assertEqual(request.request_digest(), result.receipt.original_request_sha256)
         self.assertIn(("claims", claim_path(request.identity.digest())), backend.objects)
         self.assertIn(("receipts", receipt_path(request.identity.digest())), backend.objects)
+
+    def test_receipt_and_completion_published_between_reader_reads(self):
+        backend = MemoryBackend()
+        request = request_for(backend)
+        read_trusted = backend.read_trusted
+        published = False
+        writer_events = []
+
+        def publish_after_missing_receipt(namespace, relative, *, maximum):
+            nonlocal published
+            result = read_trusted(namespace, relative, maximum=maximum)
+            if (namespace == "receipts" and relative == receipt_path(request.identity.digest())
+                    and result is None and not published):
+                published = True
+                ScienceCustodyFinalizer(backend, trace_hook=writer_events.append).finalize(request)
+            return result
+
+        backend.read_trusted = publish_after_missing_receipt
+        result = ScienceCustodyFinalizer(backend).lookup(request)
+        self.assertTrue(published)
+        if result is None:
+            result = ScienceCustodyFinalizer(backend).lookup(request)
+        self.assertIsNotNone(result)
+        self.assertEqual(request.identity.digest(), result.receipt.identity_sha256)
+        self.assertIn(("receipts", receipt_path(request.identity.digest())), backend.objects)
+        self.assertEqual(["receipt_create_result", "completion_create_result"],
+                         [event["event"] for event in writer_events
+                          if event["event"] in {"receipt_create_result", "completion_create_result"}])
+        self.assertEqual({request.request_digest()}, {event["request_sha256"] for event in writer_events})
+
+    def test_completion_without_receipt_reports_exact_request_and_stays_invalid(self):
+        backend = MemoryBackend()
+        request = request_for(backend)
+        ScienceCustodyFinalizer(backend).finalize(request)
+        del backend.objects["receipts", receipt_path(request.identity.digest())]
+
+        with self.assertRaisesRegex(CustodyCommitIntegrityError,
+                                    "Completion exists without its exact receipt") as caught:
+            ScienceCustodyFinalizer(backend).lookup(request)
+        detail = caught.exception.receipt_diagnostic
+        self.assertEqual(request.identity.digest(), detail["request_id"])
+        self.assertEqual(request.request_digest(), detail["request_digest"])
+        self.assertEqual(request.generation, detail["generation"])
+        self.assertEqual("MISSING", detail["receipt_at_failure"]["state"])
+        self.assertEqual("PRESENT", detail["completion_read"]["state"])
+
+    def test_exact_receipt_negative_matrix(self):
+        for case in ("absent", "wrong_digest", "wrong_generation", "stale_completion", "substituted"):
+            with self.subTest(case=case):
+                backend = MemoryBackend()
+                request = request_for(backend)
+                ScienceCustodyFinalizer(backend).finalize(request)
+                receipt_key = "receipts", receipt_path(request.identity.digest())
+                completion_key = "receipts", completion_path(request.identity.digest())
+
+                if case == "absent":
+                    del backend.objects[receipt_key]
+                elif case in {"wrong_digest", "wrong_generation"}:
+                    receipt = CustodyCommitReceipt.from_bytes(backend.objects[receipt_key].raw)
+                    if case == "wrong_digest":
+                        wrong_digest = "f" * 64
+                    else:
+                        other_generation = replace(request, generation="2" * 32,
+                                                   staging_name="2" * 32 + ".stage")
+                        wrong_digest = other_generation.request_digest()
+                    altered = replace(receipt, original_request_sha256=wrong_digest)
+                    core = asdict(altered)
+                    del core["receipt_identity"]
+                    altered = replace(altered, receipt_identity=sha256(canonical_protocol_bytes(core)))
+                    backend.objects[receipt_key] = replace(backend.objects[receipt_key], raw=altered.to_bytes())
+                elif case == "stale_completion":
+                    other = request_for(backend, sequence=2, generation="2" * 32)
+                    ScienceCustodyFinalizer(backend).finalize(other)
+                    stale = backend.objects["receipts", completion_path(other.identity.digest())]
+                    backend.objects[completion_key] = replace(backend.objects[completion_key], raw=stale.raw)
+                else:
+                    original = backend.objects[receipt_key]
+                    backend._new(*receipt_key, original.raw)
+
+                with self.assertRaises(CustodyCommitIntegrityError):
+                    ScienceCustodyFinalizer(backend).lookup(request)
 
     def test_late_claim_recheck_rejects_invalid_claims(self):
         for case in ("missing", "wrong_identity", "wrong_generation", "stale", "substituted"):

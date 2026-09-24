@@ -49,7 +49,7 @@ class CustodyObjectTrace:
 
 def open_020u_trace(config, *, role: str, generation: str):
     instance = config.get("host", {}).get("instanceId", "")
-    if not isinstance(instance, str) or not instance.startswith("qual-015-020u-"):
+    if not isinstance(instance, str) or not instance.startswith(("qual-015-020u-", "qual-015-020z-")):
         return None
     if not isinstance(generation, str) or _GENERATION.fullmatch(generation) is None:
         raise ValueError("Qualification trace requires a bound host generation.")

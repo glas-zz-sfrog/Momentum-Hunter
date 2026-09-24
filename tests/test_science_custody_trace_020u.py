@@ -66,11 +66,11 @@ class Trace020UTests(unittest.TestCase):
         with self.assertRaisesRegex(CustodyCommitIntegrityError,
                                     "Completion exists without its exact receipt"):
             ScienceCustodyFinalizer(backend, trace_hook=events.append).lookup(request)
-        self.assertEqual([("lookup_begin", "BEGIN"), ("receipt_read", "MISSING"),
-                          ("completion_read", "PRESENT")],
+        self.assertEqual([("lookup_begin", "BEGIN"), ("completion_read", "PRESENT"),
+                          ("receipt_read", "MISSING")],
                          [(e["event"], e["result"]) for e in events])
-        self.assertIsNone(events[1]["file_identity"])
-        self.assertIsNone(events[1]["sha256"])
+        self.assertIsNone(events[2]["file_identity"])
+        self.assertIsNone(events[2]["sha256"])
 
     def test_same_identity_distinct_generations_remain_distinct(self):
         backend = MemoryBackend()
@@ -101,10 +101,15 @@ class Trace020UTests(unittest.TestCase):
             path = Path(root) / "science" / ("custody-object-trace-" + generation + ".jsonl")
             rows = [json.loads(line) for line in path.read_text(encoding="ascii").splitlines()]
             self.assertEqual([1, 2, 3], [row["sequence"] for row in rows])
-            self.assertEqual(["lookup_begin", "receipt_read", "completion_read"],
+            self.assertEqual(["lookup_begin", "completion_read", "receipt_read"],
                              [row["event"] for row in rows])
             self.assertTrue(all(row["identity_sha256"] == request.identity.digest()
                                 for row in rows))
+            config["host"]["instanceId"] = "qual-015-020z-focused"
+            new_generation = "22345678-1234-1234-1234-123456789abc"
+            new_trace = open_020u_trace(config, role="science", generation=new_generation)
+            self.assertIsNotNone(new_trace)
+            new_trace.close()
             config["host"]["instanceId"] = "production"
             self.assertIsNone(open_020u_trace(config, role="science", generation=generation))
 
@@ -132,8 +137,26 @@ class Trace020UTests(unittest.TestCase):
             failure = report["failing_requests"][0]
             self.assertEqual(second.request_digest(), failure["request_sha256"])
             self.assertEqual(second.generation, failure["generation"])
+            self.assertEqual(["completion_read", "receipt_read"], failure["lookup_read_order"])
             self.assertIn("receipt_create_result", failure["missing_events"])
             self.assertIn("completion_create_result", failure["missing_events"])
+
+    def test_analyzer_preserves_historical_read_order(self):
+        backend = MemoryBackend()
+        request = request_for(backend)
+        ScienceCustodyFinalizer(backend).finalize(request)
+        del backend.objects["receipts", receipt_path(request.identity.digest())]
+        events = []
+        with self.assertRaises(CustodyCommitIntegrityError):
+            ScienceCustodyFinalizer(backend, trace_hook=events.append).lookup(request)
+        rows = [{"role": "science", "sequence": index, **event}
+                for index, event in enumerate(events, 1)]
+        rows[1], rows[2] = rows[2], rows[1]
+        rows[1]["sequence"], rows[2]["sequence"] = 2, 3
+        report = summarize([], rows)
+        self.assertEqual(1, report["failing_request_count"])
+        self.assertEqual(["receipt_read", "completion_read"],
+                         report["failing_requests"][0]["lookup_read_order"])
 
     def test_analyzer_rejects_wrong_path_and_missing_sequence(self):
         with TemporaryDirectory() as root:

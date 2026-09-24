@@ -608,20 +608,43 @@ class ScienceCustodyFinalizer:
         receipt_relative = receipt_path(request.identity.digest())
         completion_relative = completion_path(request.identity.digest())
         try:
-            evidence = self._read("receipts", receipt_relative, MAX_REQUEST_BYTES)
-        except Exception as exc:
-            self._trace(request, "receipt_read", receipt_relative, error=exc)
-            raise
-        self._trace(request, "receipt_read", receipt_relative, evidence=evidence)
-        try:
             completion = self._read("receipts", completion_relative, MAX_REQUEST_BYTES)
         except Exception as exc:
             self._trace(request, "completion_read", completion_relative, error=exc)
             raise
         self._trace(request, "completion_read", completion_relative, evidence=completion)
+        try:
+            evidence = self._read("receipts", receipt_relative, MAX_REQUEST_BYTES)
+        except Exception as exc:
+            self._trace(request, "receipt_read", receipt_relative, error=exc)
+            raise
+        self._trace(request, "receipt_read", receipt_relative, evidence=evidence)
         if evidence is None:
             if completion is not None:
-                raise CustodyCommitIntegrityError("Completion exists without its exact receipt.")
+                def state(namespace, relative):
+                    try:
+                        current = self._read(namespace, relative, MAX_REQUEST_BYTES)
+                    except Exception as exc:
+                        return {"state": "READ_ERROR", "error_class": type(exc).__name__}
+                    if current is None:
+                        return {"state": "MISSING", "file_identity": None, "sha256": None}
+                    return {"state": "PRESENT", "file_identity": list(current.file_identity),
+                            "sha256": sha256(current.raw)}
+
+                failure = CustodyCommitIntegrityError("Completion exists without its exact receipt.")
+                failure.receipt_diagnostic = {
+                    "request_id": request.identity.digest(), "request_digest": request.request_digest(),
+                    "generation": request.generation,
+                    "claim_path": claim_path(request.identity.digest()),
+                    "claim_at_failure": state("claims", claim_path(request.identity.digest())),
+                    "receipt_path": receipt_relative,
+                    "receipt_first_read": {"state": "MISSING", "file_identity": None, "sha256": None},
+                    "receipt_at_failure": state("receipts", receipt_relative),
+                    "completion_path": completion_relative,
+                    "completion_read": {"state": "PRESENT", "file_identity": list(completion.file_identity),
+                                        "sha256": sha256(completion.raw)},
+                }
+                raise failure
             return None
         if claim_info is None:
             # Writer may publish the claim and receipt after our first claim read.

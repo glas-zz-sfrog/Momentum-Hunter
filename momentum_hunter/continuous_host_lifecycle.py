@@ -173,6 +173,8 @@ def run_science(config, stop: threading.Event, host):
         report = {"hostFingerprint": config["hostFingerprint"], "generation": host.generation,
             "observedAt": datetime.now(timezone.utc).isoformat(), "exceptionClass": type(exc).__name__,
             "message": str(exc), "traceback": traceback.format_exc(), "nativeOverflowRecovery": recoverable}
+        if hasattr(exc, "receipt_diagnostic"):
+            report["receiptDiagnostic"] = exc.receipt_diagnostic
         path = Path(config["logRoot"]) / "science" / ("failure-" + host.generation + ".json")
         with path.open("xb") as output:
             output.write(canonical_bytes(report))

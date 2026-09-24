@@ -70,14 +70,15 @@ def summarize(writer_rows: list[dict], science_rows: list[dict]) -> dict:
             if row["event"] != "lookup_begin":
                 continue
             pair = science[index + 1:index + 3]
-            if (len(pair) == 2 and pair[0]["event"] == "receipt_read"
-                    and pair[0]["result"] == "MISSING"
-                    and pair[1]["event"] == "completion_read"
-                    and pair[1]["result"] == "PRESENT"):
+            read_results = {item["event"]: item["result"] for item in pair}
+            if (len(pair) == 2 and len(read_results) == 2
+                    and read_results.get("receipt_read") == "MISSING"
+                    and read_results.get("completion_read") == "PRESENT"):
                 observed = {event: [item for item in events if item["event"] == event]
                             for event in _EXPECTED}
                 failures.append({
                     "identity_sha256": key[0], "request_sha256": key[1], "generation": key[2],
+                    "lookup_read_order": [item["event"] for item in pair],
                     "receipt_path": f"{key[0][:2]}/{key[0]}.commit.json",
                     "completion_path": f"{key[0][:2]}/{key[0]}.complete.json",
                     "events": observed,
