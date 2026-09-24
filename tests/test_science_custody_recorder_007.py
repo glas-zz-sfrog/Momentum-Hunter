@@ -8,7 +8,7 @@ from contextlib import contextmanager
 import hashlib
 import json
 import os
-from pathlib import Path
+from pathlib import Path, PurePath
 import tempfile
 import threading
 import time
@@ -26,6 +26,7 @@ from momentum_hunter.science_custody_mailbox import (
 )
 from momentum_hunter.science_custody_readonly import ScienceCustodyStorageSet
 from momentum_hunter.strategy_science_continuous_recorder import ContinuousScienceRecorder
+from momentum_hunter.strategy_science_recorder.custody import RecorderRecoveryError, StrategyScienceRecorder
 from momentum_hunter.strategy_science_source_reader import SourceReaderError, StrategyScienceSourceReaderV2
 from tests.test_strategy_science_continuous_recorder import core_fixtures, publication, TickingClock
 from tests.test_strategy_science_recorder_contract import (
@@ -203,6 +204,51 @@ class FilesystemProtocolFixture:
             self.thread.join(5)
         if self.thread.is_alive():
             raise AssertionError('Structural test worker did not stop.')
+
+
+class PublicationReadbackReuseTests(unittest.TestCase):
+    def test_confirmed_bytes_are_compared_locally_before_fresh_ack(self):
+        for mutation in (None, 'after_confirm', 'before_ack'):
+            with self.subTest(mutation=mutation), tempfile.TemporaryDirectory() as directory:
+                root = Path(directory)
+                path = root / 'record.json'
+                raw = b'committed'
+                calls = []
+
+                def create(_relative, value):
+                    calls.append('create')
+                    path.write_bytes(value)
+                    return True
+
+                def confirm(_relative):
+                    calls.append('confirm')
+                    return path.read_bytes()
+
+                def published(_relative):
+                    calls.append('published')
+                    if mutation == 'after_confirm':
+                        path.write_bytes(b'substituted')
+
+                def acknowledge(_relative, value):
+                    calls.append('ack')
+                    if mutation == 'before_ack':
+                        path.write_bytes(b'substituted')
+                    if path.read_bytes() != value:
+                        raise RecorderRecoveryError('Fresh acknowledgement rejected substitution.')
+
+                recorder = object.__new__(StrategyScienceRecorder)
+                recorder._storage = SimpleNamespace(root=root, atomic_create=create,
+                    read_committed=confirm, publication_verified=acknowledge)
+                recorder._views = SimpleNamespace(depth=0, published=published)
+                recorder._custody_storage_set = object()
+                if mutation is None:
+                    self.assertTrue(recorder._atomic_create(PurePath('record.json'), raw))
+                    self.assertEqual(calls, ['create', 'confirm', 'published', 'ack'])
+                else:
+                    with self.assertRaises(RecorderRecoveryError):
+                        recorder._atomic_create(PurePath('record.json'), raw)
+                    self.assertEqual(calls, ['create', 'confirm', 'published'] +
+                                     (['ack'] if mutation == 'before_ack' else []))
 
 
 @unittest.skipUnless(os.name == 'nt', 'Science005 notification compatibility requires Windows')

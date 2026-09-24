@@ -243,6 +243,36 @@ class DecodedNativeAdmissionTests(unittest.TestCase):
             self.assertFalse(handle.closed)
         backend._check_pins()
 
+    def test_fixed_access_denial_reuse_requires_unchanged_token_and_descriptor(self):
+        backend = self.start()
+        backend._fixed_access_cache.clear()
+        denied = {right: False for right in actors.MUTATION_RIGHTS}
+        with patch.object(custody, 'access_decisions', return_value=denied) as access:
+            backend._check_pins()
+            first = access.call_count
+            self.assertGreater(first, 0)
+            backend._check_pins()
+            self.assertEqual(access.call_count, first)
+
+            root = self.target()
+            path = Path(self.decoded.root('derived').path)
+            observed = dict(backend.last_token_observation)
+            observed['modified_id'] = (observed['modified_id'][0] + 1,
+                                       observed['modified_id'][1])
+            backend.last_token_observation = observed
+            backend._forbidden_access_decisions(path, root.security)
+            self.assertEqual(access.call_count, first + 1)
+            backend._forbidden_access_decisions(path, replace(root.security, sddl=root.security.sddl + 'changed'))
+            self.assertEqual(access.call_count, first + 2)
+
+    def test_cached_access_denial_does_not_hide_root_security_drift(self):
+        backend = self.start()
+        backend._check_pins()
+        self.target().security = replace(self.target().security, control=0x9004)
+        with self.assertRaises(custody.ScienceCustodyNativeError):
+            backend.create_transport('requests', 'request.json', b'raw')
+        self.assertTrue(backend._closed)
+
 
 if __name__ == '__main__':
     unittest.main()

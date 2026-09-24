@@ -463,10 +463,10 @@ class StrategyScienceRecorder:
         except (OSError, CanonicalizationError) as exc:
             raise RecorderRecoveryError(f"Invalid persisted {label}: {path.name}.") from exc
 
-    def _read_raw(self, path: Path) -> bytes:
+    def _read_raw(self, path: Path, *, confirmed_raw: bytes | None = None) -> bytes:
         relative = path.relative_to(self._storage.root)
         confirmed = (self._storage.read_committed(relative)
-                     if self._custody_storage_set is not None else None)
+                     if confirmed_raw is None and self._custody_storage_set is not None else confirmed_raw)
         if self._views is not None and self._views.depth and relative.parts[0] == 'sessions':
             raw = self._views.reads.read(path)
         else:
@@ -477,17 +477,18 @@ class StrategyScienceRecorder:
 
     def _atomic_create(self, relative: PurePath, raw: bytes) -> bool:
         created = self._storage.atomic_create(relative, raw)
-        if self._views is not None:
-            if self._storage.read_committed(relative) != raw:
+        confirmed = None
+        if self._views is not None or self._custody_storage_set is not None:
+            confirmed = self._storage.read_committed(relative)
+            if confirmed != raw:
                 raise RecorderRecoveryError('Canonical Writer005 committed readback differs from exact bytes.')
+        if self._views is not None:
             self._views.published(relative)
             # Do not advance reusable state on speculative caller bytes. Re-read
             # the physically installed, singleton raw object under R-coherence.
-            if self._read_raw(self._storage.root / Path(relative)) != raw:
+            if self._read_raw(self._storage.root / Path(relative), confirmed_raw=confirmed) != raw:
                 raise RecorderRecoveryError('Installed custody bytes differ from publication input.')
         if self._custody_storage_set is not None:
-            if self._storage.read_committed(relative) != raw:
-                raise RecorderRecoveryError('Sealed custody readback differs from publication input.')
             self._storage.publication_verified(relative, raw)
         return created
 

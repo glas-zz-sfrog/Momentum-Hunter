@@ -700,6 +700,7 @@ class WindowsScienceCustodyBackend:
         self._closed = False
         self._pins = {}
         self._fixed_keys = frozenset()
+        self._fixed_access_cache = {}
         self._transaction_depth = 0
         self._lease = None
         self._root_evidence = {}
@@ -778,7 +779,7 @@ class WindowsScienceCustodyBackend:
             if self.policy.actor_profile is None:
                 _verify_ancestor(self.policy, sec)
             else:
-                decisions = access_decisions(self._native, sec.sddl, MUTATION_RIGHTS)
+                decisions = self._forbidden_access_decisions(path, sec)
                 _require(not any(decisions.values()),
                          "Actual native actor can mutate a replaceable ancestor.")
         else:
@@ -786,9 +787,29 @@ class WindowsScienceCustodyBackend:
             if self.policy.actor_profile is not None and (
                     (self.role == "science" and kind in {"trusted", "private"}) or
                     (self.role == "writer" and kind in {"transport", "derived"} | mutable.KINDS | {mutable.COMMON})):
-                decisions = access_decisions(self._native, sec.sddl, MUTATION_RIGHTS)
+                decisions = self._forbidden_access_decisions(path, sec)
                 _require(not any(decisions.values()), "Actual native actor has forbidden namespace authority.")
         return sec
+
+    def _forbidden_access_decisions(self, path: Path, sec: _Security):
+        # Fresh actor and descriptor checks precede this lookup. A token's
+        # ModifiedId changes with its security context, while dynamic leaves
+        # always take the uncached native AccessCheck path.
+        observed = self.last_token_observation
+        token_id = observed.get("token_id")
+        modified_id = observed.get("modified_id")
+        key = _path_key(path)
+        if (self.role != "science" or key not in self._fixed_keys
+                or type(token_id) is not tuple or len(token_id) != 2
+                or type(modified_id) is not tuple or len(modified_id) != 2):
+            return access_decisions(self._native, sec.sddl, MUTATION_RIGHTS)
+        identity = (token_id, modified_id, sec.sddl)
+        cached = self._fixed_access_cache.get(key)
+        if cached is not None and cached[0] == identity:
+            return cached[1]
+        decisions = access_decisions(self._native, sec.sddl, MUTATION_RIGHTS)
+        self._fixed_access_cache[key] = (identity, decisions)
+        return decisions
 
     def _pin_binding(self, binding: CustodyRootBinding, *, ancestor: bool) -> None:
         path = Path(binding.path)
@@ -1336,6 +1357,7 @@ class WindowsScienceCustodyBackend:
         if getattr(self, "_closed", True):
             return
         self._closed = True
+        self._fixed_access_cache.clear()
         errors = []
         if self._lease is not None:
             try:
