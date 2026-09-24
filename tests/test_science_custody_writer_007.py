@@ -22,6 +22,7 @@ from momentum_hunter.science_custody_commit import (
     CustodyCommitIntegrityError,
     CustodyCommitPending,
 )
+from momentum_hunter.windows_science_custody import ScienceCustodyNativeError
 from tests import test_continuous_production as production_fixtures
 
 
@@ -75,6 +76,7 @@ class ScienceCustodyWriter007Tests(unittest.TestCase):
         self.config = self.helper._config(self.root)
         self.servers = []
         self.channels = []
+        self.seen_failure_receipts = set()
         self.addCleanup(self._close_everything)
 
     def _close_everything(self):
@@ -107,6 +109,17 @@ class ScienceCustodyWriter007Tests(unittest.TestCase):
             if time.monotonic() >= deadline:
                 self.fail("Timed out awaiting a bounded test transition")
             threading.Event().wait(0.005)
+
+    def _failure_receipt(self, server):
+        directory = (Path(self.config["logRoot"]) / "writer"
+                     if "logRoot" in self.config else server.root / "status")
+        self._await(lambda: bool(set(directory.glob("custody-failure-*.json"))
+                                 - self.seen_failure_receipts))
+        paths = list(set(directory.glob("custody-failure-*.json"))
+                     - self.seen_failure_receipts)
+        self.assertEqual(1, len(paths))
+        self.seen_failure_receipts.add(paths[0])
+        return json.loads(paths[0].read_text(encoding="ascii"))
 
     def _production_write(self, server, *, source="production-continuous-runtime-custody007"):
         remote = production.ProductionRemoteWriter(self.config, source_identity=source)
@@ -212,6 +225,57 @@ class ScienceCustodyWriter007Tests(unittest.TestCase):
         self.assertEqual(1, server.science_custody_status["pollCount"])
         self.assertEqual("ValueError", server.science_custody_status["lastError"])
         self.assertTrue(channel.closed.is_set())
+        receipt = self._failure_receipt(server)
+        self.assertEqual("ValueError", receipt["exceptionType"])
+        self.assertEqual("malformed request", receipt["exceptionMessage"])
+        self.assertEqual("POLL", receipt["writerOperationOrState"])
+        self.assertIsNone(receipt["requestIdOrDigestIfAvailable"])
+        self.assertIn("continuous_production.py", receipt["traceback"])
+
+    def test_native_failure_preserves_exact_message_cause_and_traceback(self):
+        native_message = "GetSecurityInfo: required native authority/evidence failed (Win32 5)."
+        self.config["logRoot"] = str(self.root / "logs")
+
+        class NativeFailureChannel(_ControlledChannel):
+            def poll_once(self):
+                self.entered.set()
+                try:
+                    raise PermissionError(13, "Access is denied", "C:\\private\\source")
+                except PermissionError as cause:
+                    raise ScienceCustodyNativeError(native_message) from cause
+
+        channel = NativeFailureChannel()
+        server = self._server(channel)
+        self._await(lambda: server.science_custody_status["state"] == "FAILED")
+        receipt = self._failure_receipt(server)
+        self.assertEqual("ScienceCustodyNativeError", receipt["exceptionType"])
+        self.assertEqual(native_message, receipt["exceptionMessage"])
+        self.assertEqual("PermissionError", receipt["exceptionCauseType"])
+        self.assertEqual("Access is denied", receipt["exceptionCauseMessage"])
+        self.assertEqual("PermissionError", receipt["exceptionContextType"])
+        self.assertIn("test_science_custody_writer_007.py", receipt["traceback"])
+        self.assertNotIn("private", json.dumps(receipt))
+        self.assertEqual("FAILED", server.science_custody_status["state"])
+        self.assertEqual("ScienceCustodyNativeError", server.science_custody_status["lastError"])
+
+    def test_benign_native_token_word_is_not_a_secret_marker(self):
+        message = "Token query size is invalid."
+        self.assertEqual(message, production._custody_exception_message(
+            ScienceCustodyNativeError(message)))
+
+    def test_failure_receipt_omits_secret_and_unbounded_messages(self):
+        for message in ("password=very-sensitive-value", "Bearer hidden-value", "X" * 4096):
+            with self.subTest(message=message[:24]):
+                channel = _ControlledChannel(error=ValueError(message))
+                server = self._server(channel)
+                self._await(lambda: server.science_custody_status["state"] == "FAILED")
+                receipt = self._failure_receipt(server)
+                self.assertEqual("[OMITTED:UNSAFE_OR_OVERSIZE]", receipt["exceptionMessage"])
+                self.assertNotIn(message, json.dumps(receipt))
+                self.assertLess(len(json.dumps(receipt)), 4096)
+                self.assertEqual("FAILED", server.science_custody_status["state"])
+                server.close()
+                self.servers.remove(server)
 
     def test_integrity_conflict_and_protocol_errors_are_terminal_for_science_only(self):
         cases = (

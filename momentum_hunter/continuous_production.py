@@ -32,15 +32,17 @@ import hashlib
 import hmac
 import json
 import os
+import re
 import secrets
 import socket
 import socketserver
 import sys
 import threading
 import time
+import traceback
 from contextlib import ExitStack
 from dataclasses import asdict, dataclass
-from datetime import datetime, time as clock_time
+from datetime import datetime, time as clock_time, timezone
 from pathlib import Path, PurePath
 from typing import TYPE_CHECKING, Any, Mapping
 from zoneinfo import ZoneInfo
@@ -293,6 +295,57 @@ def _open_science_custody_writer(policy: ScienceCustodyPolicy, *, trace_hook=Non
     return open_science_custody_writer(policy, trace_hook=trace_hook)
 
 
+_DIAGNOSTIC_SECRET = re.compile(
+    r"(?i)(?:\b(?:password|passwd|secret|token|authorization|api[_-]?key|credential)\s*[:=]\s*\S+"
+    r"|\bbearer\s+\S+)"
+)
+_DIAGNOSTIC_LONG_VALUE = re.compile(r"[A-Za-z0-9_=-]{32,}")
+
+
+def _custody_exception_message(exc: BaseException | None) -> str | None:
+    if exc is None:
+        return None
+    try:
+        # OSError.__str__ may append a pathname. The native code and strerror
+        # are the useful diagnostic facts; the pathname is not needed here.
+        if isinstance(exc, OSError):
+            message = exc.strerror or ""
+            code = getattr(exc, "winerror", None)
+            if code is not None:
+                message = f"{message} (Win32 {code})"
+        else:
+            message = str(exc)
+    except Exception:
+        return "[UNAVAILABLE]"
+    if (len(message) > 2048 or _DIAGNOSTIC_SECRET.search(message)
+            or _DIAGNOSTIC_LONG_VALUE.search(message)
+            or any(ord(char) < 32 and char not in "\n\t" for char in message)):
+        return "[OMITTED:UNSAFE_OR_OVERSIZE]"
+    return message
+
+
+def _custody_failure_receipt(exc: BaseException, *, operation: str,
+                             generation: str | None) -> dict[str, object]:
+    frames = traceback.extract_tb(exc.__traceback__)[-24:]
+    return {
+        "schemaVersion": 1,
+        "profile": "ARGUS_020AH_WRITER_CUSTODY_FAILURE_V1",
+        "observedAt": datetime.now(timezone.utc).isoformat(),
+        "exceptionType": type(exc).__name__,
+        "exceptionMessage": _custody_exception_message(exc),
+        "exceptionCauseType": type(exc.__cause__).__name__ if exc.__cause__ else None,
+        "exceptionCauseMessage": _custody_exception_message(exc.__cause__),
+        "exceptionContextType": type(exc.__context__).__name__ if exc.__context__ else None,
+        "exceptionContextMessage": _custody_exception_message(exc.__context__),
+        "traceback": "\n".join(
+            f"{Path(frame.filename).name}:{frame.lineno}:{frame.name}" for frame in frames
+        ),
+        "writerOperationOrState": operation,
+        "generation": generation if isinstance(generation, str) and len(generation) <= 64 else None,
+        "requestIdOrDigestIfAvailable": None,
+    }
+
+
 class _ScienceCustodyWorker:
     """One separate, serial mailbox consumer; no in-memory work queue.
 
@@ -305,9 +358,12 @@ class _ScienceCustodyWorker:
     POLL_INTERVAL_SECONDS = 0.05
     STOP_WAIT_SECONDS = 0.25
 
-    def __init__(self, policy: ScienceCustodyPolicy, *, trace_hook=None) -> None:
+    def __init__(self, policy: ScienceCustodyPolicy, *, trace_hook=None,
+                 diagnostic_root: Path | None = None, generation: str | None = None) -> None:
         self._policy = policy
         self._trace_hook = trace_hook
+        self._diagnostic_root = diagnostic_root
+        self._generation = generation
         self._stop = threading.Event()
         self._status_lock = threading.Lock()
         self._status: dict[str, object] = {
@@ -325,6 +381,20 @@ class _ScienceCustodyWorker:
             self._thread.start()
         except Exception as exc:
             self._set_status(state="START_FAILED", lastError=type(exc).__name__)
+            self._record_failure(exc, operation="START")
+
+    def _record_failure(self, exc: BaseException, *, operation: str) -> None:
+        if self._diagnostic_root is None:
+            return
+        try:
+            receipt = _custody_failure_receipt(
+                exc, operation=operation, generation=self._generation
+            )
+            path = self._diagnostic_root / f"custody-failure-{secrets.token_hex(16)}.json"
+            _atomic_replace(path, _canonical_bytes(receipt))
+        except Exception:
+            # Diagnostic I/O must not change the custody failure disposition.
+            pass
 
     def _set_status(self, **values: object) -> None:
         # No native call, filesystem access, or production operation under this lock.
@@ -356,6 +426,7 @@ class _ScienceCustodyWorker:
     def _run(self) -> None:
         channel = None
         failed = False
+        operation = "OPEN"
         try:
             from momentum_hunter.science_custody_commit import CustodyCommitPending
 
@@ -363,6 +434,7 @@ class _ScienceCustodyWorker:
                        else _open_science_custody_writer(self._policy, trace_hook=self._trace_hook))
             self._set_status(state="READY")
             while not self._stop.is_set():
+                operation = "POLL"
                 self._set_status(state="POLLING", inFlight=True)
                 try:
                     result = channel.poll_once()
@@ -386,6 +458,7 @@ class _ScienceCustodyWorker:
             failed = True
             self._increment("errorCount")
             self._set_status(state="FAILED", lastError=type(exc).__name__)
+            self._record_failure(exc, operation=operation)
         finally:
             try:
                 if channel is not None:
@@ -394,6 +467,7 @@ class _ScienceCustodyWorker:
                 failed = True
                 self._increment("errorCount")
                 self._set_status(state="CLOSE_FAILED", lastError=type(exc).__name__)
+                self._record_failure(exc, operation="CLOSE")
             finally:
                 close_trace = getattr(self._trace_hook, "close", None)
                 if close_trace is not None:
@@ -410,6 +484,7 @@ class ProductionWriterServer:
         science_custody_policy: ScienceCustodyPolicy | None = None,
         native_writer_admission=None,
         custody_trace_hook=None,
+        custody_generation: str | None = None,
     ) -> None:
         self.config = config
         self._native_writer_admission = native_writer_admission
@@ -437,7 +512,12 @@ class ProductionWriterServer:
         # native backend, open roots, construct synchronization, or start a timer.
         self._science_custody_worker = (
             None if science_custody_policy is None
-            else _ScienceCustodyWorker(science_custody_policy, trace_hook=custody_trace_hook)
+            else _ScienceCustodyWorker(
+                science_custody_policy, trace_hook=custody_trace_hook,
+                diagnostic_root=(Path(str(config["logRoot"])) / "writer"
+                                 if "logRoot" in config else self.root / "status"),
+                generation=custody_generation,
+            )
         )
 
     @property
@@ -1148,7 +1228,8 @@ def run_writer(config_path: Path, stop=None, host=None) -> int:
     try:
         admission = None if policy is None else NativeWriterAdmission(config, policy)
         server = ProductionWriterServer(config, science_custody_policy=policy,
-                                        native_writer_admission=admission, custody_trace_hook=trace)
+                                        native_writer_admission=admission, custody_trace_hook=trace,
+                                        custody_generation=host.generation if host else None)
         complete = server.serve_forever(str(config["ipcHost"]), int(config["ipcPort"]), stop, host)
     finally:
         try:
