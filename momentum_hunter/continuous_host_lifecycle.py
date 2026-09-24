@@ -52,7 +52,7 @@ def upstream_generations(config, role):
             for key in {"writer": (), "runtime": ("writer",), "science": ("writer", "runtime")}[role]}
 
 
-def open_host_science_storage(config, *, trace_hook=None):
+def open_host_science_storage(config, *, trace_hook=None, readiness_trace=None):
     from momentum_hunter.windows_science_custody import open_science_custody_backend
     from momentum_hunter.science_custody_mailbox import ScienceCustodyMailboxClient
     from momentum_hunter.science_custody_readonly import ScienceCustodyStorageSet
@@ -64,7 +64,8 @@ def open_host_science_storage(config, *, trace_hook=None):
             source_root_identity=policy.source_root_identity, mailbox_backend=backend,
             trace_hook=trace_hook)
         return ScienceCustodyStorageSet(client,
-            recovery_clock=lambda: datetime.now(timezone.utc).isoformat())
+            recovery_clock=lambda: datetime.now(timezone.utc).isoformat(),
+            readiness_trace=readiness_trace)
     except BaseException:
         backend.close()
         raise
@@ -122,7 +123,8 @@ def run_science(config, stop: threading.Event, host):
                     continue
                 status("RECOVERING", auditRequired=True)
                 with recovery_stage(readiness_trace, "SCIENCE_OPEN_STORAGE"):
-                    storage_set = open_host_science_storage(config, trace_hook=trace)
+                    storage_set = open_host_science_storage(config, trace_hook=trace,
+                                                            readiness_trace=readiness_trace)
                 with recovery_stage(readiness_trace, "SCIENCE_SECURITY_EVIDENCE"):
                     native = storage_set.backend.security_contract_evidence
                     custody_evidence = {"profile": native["profile"], "policySha256": native["policy_sha256"],

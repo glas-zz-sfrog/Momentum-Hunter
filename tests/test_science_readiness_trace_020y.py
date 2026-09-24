@@ -326,7 +326,7 @@ class ScienceReadinessTrace020YTests(unittest.TestCase):
             "profile": "TEST", "policy_sha256": "test", "role": "science",
             "token": {}, "exact_owner_dacl_label_policy_verified": True}
         with patch.object(lifecycle, "upstream_generations", return_value={"writer": "w", "runtime": "r"}), \
-             patch.object(lifecycle, "open_host_science_storage", return_value=storage), \
+             patch.object(lifecycle, "open_host_science_storage", return_value=storage) as opened_storage, \
              patch.object(lifecycle, "completion", return_value=True), \
              patch.object(lifecycle.time, "sleep"), \
              patch("momentum_hunter.strategy_science_continuous_recorder.ContinuousScienceRecorder",
@@ -334,6 +334,7 @@ class ScienceReadinessTrace020YTests(unittest.TestCase):
             stop = threading.Event()
             stop.set()
             self.assertEqual(0, lifecycle.run_science(config, stop, host))
+        self.assertIsNotNone(opened_storage.call_args.kwargs["readiness_trace"])
         rows = self.rows(SimpleNamespace(close=lambda: None))
         snapshot = [row for row in rows if row["event"] == "recovery_snapshot"]
         self.assertEqual(1, len(snapshot))

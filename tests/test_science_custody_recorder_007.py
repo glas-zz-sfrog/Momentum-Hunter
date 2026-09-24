@@ -217,10 +217,72 @@ class SealedRecorderIntegrationTests(unittest.TestCase):
         self.addCleanup(self.backend.close)
         self.clock = TickingClock()
 
-    def storage_set(self):
+    def storage_set(self, *, readiness_trace=None):
         client = ScienceCustodyMailboxClient(policy_sha256=self.backend.policy_sha256,
                     source_root_identity=SOURCE_ROOT_IDENTITY, mailbox_backend=self.backend)
-        return ScienceCustodyStorageSet(client, timeout_seconds=3, recovery_clock=self.clock)
+        return ScienceCustodyStorageSet(client, timeout_seconds=3, recovery_clock=self.clock,
+                                       readiness_trace=readiness_trace)
+
+    def test_readiness_trace_marks_pending_read_without_changing_result(self):
+        events = []
+        storage = self.storage_set(readiness_trace=lambda event, **detail: events.append((event, detail)))
+        entered = threading.Event()
+        release = threading.Event()
+        outcome = []
+
+        def held_read(alias, relative):
+            entered.set()
+            if not release.wait(3):
+                raise AssertionError('Deterministic read barrier timed out.')
+            return SimpleNamespace(raw=b'confirmed')
+
+        def reader():
+            try:
+                outcome.append(storage.read_committed('arrivals', 'ledger/bound.json'))
+            except Exception as exc:
+                outcome.append(exc)
+
+        with patch.object(storage.client, 'read_confirmed', side_effect=held_read):
+            thread = threading.Thread(target=reader)
+            thread.start()
+            try:
+                self.assertTrue(entered.wait(3))
+                self.assertEqual([name for name, _ in events], ['SCIENCE_CUSTODY_READ_CONFIRM_ENTER'])
+            finally:
+                release.set()
+                thread.join(3)
+        self.assertFalse(thread.is_alive())
+        self.assertEqual(outcome, [b'confirmed'])
+        self.assertEqual([name for name, _ in events],
+                         ['SCIENCE_CUSTODY_READ_CONFIRM_ENTER', 'SCIENCE_CUSTODY_READ_CONFIRM_EXIT'])
+        self.assertEqual(events[0][1], {'alias': 'arrivals', 'relative_path': 'ledger/bound.json'})
+
+    def test_readiness_trace_failure_does_not_change_custody_result(self):
+        def failed_trace(event, **detail):
+            raise RuntimeError('qualification trace unavailable')
+
+        storage = self.storage_set(readiness_trace=failed_trace)
+        raw = b'{"profile":"SCIENCE_CONTINUOUS_RECEIPT_LEDGER_V1","sequence":2}\n'
+        relative = 'ledger/' + '00000000000000000002-' + hashlib.sha256(raw).hexdigest() + '.event.json'
+        storage.publish('arrivals', relative, raw)
+        self.assertEqual(storage.read_committed('arrivals', relative), raw)
+        storage.publication_verified('arrivals', relative, raw)
+        self.assertFalse(list(self.backend.roots['requests'].iterdir()))
+
+    def test_readiness_trace_preserves_publish_read_ack_order(self):
+        events = []
+        storage = self.storage_set(readiness_trace=lambda event, **detail: events.append(event))
+        raw = b'{"profile":"SCIENCE_CONTINUOUS_RECEIPT_LEDGER_V1","sequence":3}\n'
+        relative = 'ledger/' + '00000000000000000003-' + hashlib.sha256(raw).hexdigest() + '.event.json'
+        storage.publish('arrivals', relative, raw)
+        self.assertEqual(storage.read_committed('arrivals', relative), raw)
+        storage.publication_verified('arrivals', relative, raw)
+        self.assertEqual(events, [
+            'SCIENCE_CUSTODY_PUBLISH_ENTER', 'SCIENCE_CUSTODY_AWAIT_ENTER',
+            'SCIENCE_CUSTODY_AWAIT_EXIT', 'SCIENCE_CUSTODY_PUBLISH_EXIT',
+            'SCIENCE_CUSTODY_READ_CONFIRM_ENTER', 'SCIENCE_CUSTODY_READ_CONFIRM_EXIT',
+            'SCIENCE_CUSTODY_ACK_ENTER', 'SCIENCE_CUSTODY_ACK_EXIT',
+        ])
 
     def opened(self, storage_set=None):
         instance = ContinuousScienceRecorder(self.publication, self.backend.science,

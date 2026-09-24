@@ -60,7 +60,7 @@ The caller owns this object's lifetime independently of recorder views.
 """
     def __init__(self, client: ScienceCustodyMailboxClient, *,
                  timeout_seconds: float = 10.0, poll_seconds: float = 0.01,
-                 recovery_clock=None):
+                 recovery_clock=None, readiness_trace=None):
         if not isinstance(client, ScienceCustodyMailboxClient):
             raise CustodyCommitError('An explicit Science mailbox client is required.')
         if (isinstance(timeout_seconds, bool) or isinstance(poll_seconds, bool)
@@ -73,6 +73,7 @@ The caller owns this object's lifetime independently of recorder views.
         self.timeout_seconds = float(timeout_seconds)
         self.poll_seconds = float(poll_seconds)
         self._lock = threading.RLock()
+        self._readiness_trace = readiness_trace
         self._closed = False
         self._pending = self._result = None
         self._reconfirming = False
@@ -100,16 +101,34 @@ The caller owns this object's lifetime independently of recorder views.
         if self._closed:
             raise CustodyCommitError('Science custody channel is closed.')
 
+    @contextmanager
+    def _stage(self, name, alias=None, relative=None):
+        detail = {} if alias is None else {'alias': alias, 'relative_path': str(relative)}
+        try:
+            if self._readiness_trace is not None:
+                self._readiness_trace(name + '_ENTER', **detail)
+        except Exception:
+            pass
+        try:
+            yield
+        finally:
+            try:
+                if self._readiness_trace is not None:
+                    self._readiness_trace(name + '_EXIT', **detail)
+            except Exception:
+                pass
+
     def _await(self, pending):
-        deadline = time.monotonic() + self.timeout_seconds
-        while True:
-            result = self.client.reconcile(pending)
-            if result is not None:
-                return result
-            remaining = deadline - time.monotonic()
-            if remaining <= 0:
-                raise CustodyCommitPending('Commit outcome pending; staging and request preserved.')
-            time.sleep(min(self.poll_seconds, remaining))
+        with self._stage('SCIENCE_CUSTODY_AWAIT'):
+            deadline = time.monotonic() + self.timeout_seconds
+            while True:
+                result = self.client.reconcile(pending)
+                if result is not None:
+                    return result
+                remaining = deadline - time.monotonic()
+                if remaining <= 0:
+                    raise CustodyCommitPending('Commit outcome pending; staging and request preserved.')
+                time.sleep(min(self.poll_seconds, remaining))
 
     def root(self, alias):
         if alias not in ('arrivals', 'custody', 'cursors'):
@@ -125,42 +144,46 @@ The caller owns this object's lifetime independently of recorder views.
 
     def publish(self, alias, relative, raw, *, crash_after_temp=False):
         self._ensure_open()
-        with self._lock:
-            if self._pending is not None:
-                raise CustodyCommitPending('Prior publication must be locally verified before another commit.')
-            pending = self.client.submit(final_root=alias, relative_path=PurePath(relative).as_posix(),
-                                         raw=bytes(raw), crash_after_stage=crash_after_temp)
-            self._pending = pending
-            self._result = self._await(pending)
-            return self._result.created
+        with self._stage('SCIENCE_CUSTODY_PUBLISH', alias, relative):
+            with self._lock:
+                if self._pending is not None:
+                    raise CustodyCommitPending('Prior publication must be locally verified before another commit.')
+                pending = self.client.submit(final_root=alias, relative_path=PurePath(relative).as_posix(),
+                                             raw=bytes(raw), crash_after_stage=crash_after_temp)
+                self._pending = pending
+                self._result = self._await(pending)
+                return self._result.created
 
     def publication_verified(self, alias, relative, raw):
         self._ensure_open()
-        with self._lock:
-            if self._pending is None or self._result is None:
-                raise CustodyCommitError('No pending committed publication to acknowledge.')
-            request = self._pending.request
-            if (request.final_root != alias
-                    or request.final_relative_path != PurePath(relative).as_posix()
-                    or request.content_sha256 != hashlib.sha256(raw).hexdigest()
-                    or request.byte_length != len(raw)):
-                raise CustodyCommitError('Local publication acknowledgement differs from pending identity.')
-            # Reconcile performs a fresh trusted receipt/final readback. The
-            # caller's notification success cannot replace that authority.
-            result = self.client.reconcile(self._pending)
-            if result is None or result.receipt != self._result.receipt:
-                raise CustodyCommitError('Receipt changed before local acknowledgement.')
-            self.client.acknowledge(self._pending, result)
-            self._pending = self._result = None
+        with self._stage('SCIENCE_CUSTODY_ACK', alias, relative):
+            with self._lock:
+                if self._pending is None or self._result is None:
+                    raise CustodyCommitError('No pending committed publication to acknowledge.')
+                request = self._pending.request
+                if (request.final_root != alias
+                        or request.final_relative_path != PurePath(relative).as_posix()
+                        or request.content_sha256 != hashlib.sha256(raw).hexdigest()
+                        or request.byte_length != len(raw)):
+                    raise CustodyCommitError('Local publication acknowledgement differs from pending identity.')
+                # Reconcile performs a fresh trusted receipt/final readback. The
+                # caller's notification success cannot replace that authority.
+                result = self.client.reconcile(self._pending)
+                if result is None or result.receipt != self._result.receipt:
+                    raise CustodyCommitError('Receipt changed before local acknowledgement.')
+                self.client.acknowledge(self._pending, result)
+                self._pending = self._result = None
 
     def read_committed(self, alias, relative):
         self._ensure_open()
         relative = PurePath(relative).as_posix()
         with self._lock:
             try:
-                evidence = self.client.read_confirmed(alias, relative)
+                with self._stage('SCIENCE_CUSTODY_READ_CONFIRM', alias, relative):
+                    evidence = self.client.read_confirmed(alias, relative)
             except CustodyCommitPending:
-                inspected = self.client.inspect_existing(alias, relative)
+                with self._stage('SCIENCE_CUSTODY_INSPECT_EXISTING', alias, relative):
+                    inspected = self.client.inspect_existing(alias, relative)
                 if inspected is None:
                     raise WriterPhysicalStorageError('Unconfirmed object disappeared.')
                 original, visible = inspected
@@ -173,7 +196,8 @@ The caller owns this object's lifetime independently of recorder views.
                 elif self._pending.request.commit_binding() != original.commit_binding():
                     raise CustodyCommitPending('Another publication remains pending; reconfirmation deferred.')
                 self._result = self._await(self._pending)
-                evidence = self.client.read_confirmed(alias, relative)
+                with self._stage('SCIENCE_CUSTODY_READ_CONFIRM', alias, relative):
+                    evidence = self.client.read_confirmed(alias, relative)
             if evidence is None:
                 raise WriterPhysicalStorageError('Committed object is absent.')
             if (self._reconfirming and self._pending.request.final_root == alias
