@@ -73,6 +73,7 @@ def open_host_science_storage(config, *, trace_hook=None):
 def run_science(config, stop: threading.Event, host):
     from momentum_hunter.strategy_science_continuous_recorder import ContinuousScienceRecorder
     from momentum_hunter.strategy_science_recorder.namespace_changes import NamespaceRecoveryRequired
+    from momentum_hunter.science_readiness_trace_020y import emit_readiness_trace, recovery_stage
 
     settings = config["host"]["science"]
     published = Path(config["researchFactExportV2"]["exportRoot"]) / "published"
@@ -82,15 +83,15 @@ def run_science(config, stop: threading.Event, host):
     custody_evidence = None
     quiet = 0
     stop_deadline = None
+    first_poll = True
     def status(state, **extra):
         host.status(state, coverage=coverage, dependencies=bound or {},
                      custodyBoundary=custody_evidence, **extra)
-        if readiness_trace is not None:
-            readiness_trace("science_status", state=state,
-                dependencies=bound or {},
-                raw_arrival_count=coverage.get("raw_arrival_count", 0),
-                normalized_record_count=coverage.get("normalized_record_count", 0),
-                admitted_arrival_count=coverage.get("admitted_arrival_count", 0))
+        emit_readiness_trace(readiness_trace, "science_status", state=state,
+            dependencies=bound or {},
+            raw_arrival_count=coverage.get("raw_arrival_count", 0),
+            normalized_record_count=coverage.get("normalized_record_count", 0),
+            admitted_arrival_count=coverage.get("admitted_arrival_count", 0))
     try:
         status("STARTING")
         from momentum_hunter.science_custody_trace_020u import open_020u_trace
@@ -113,33 +114,41 @@ def run_science(config, stop: threading.Event, host):
                     storage_set = None
                 custody_evidence = None
                 bound, quiet = dependencies, 0
-                if readiness_trace is not None:
-                    readiness_trace("dependency_bound", dependencies=bound)
+                emit_readiness_trace(readiness_trace, "dependency_bound", dependencies=bound)
             if recorder is None:
                 if not all(bound.values()) or not published.is_dir():
                     status("DEGRADED", reason="WAITING_FOR_PRODUCER_PUBLICATION", drainComplete=False)
                     time.sleep(settings["pollSeconds"])
                     continue
                 status("RECOVERING", auditRequired=True)
-                storage_set = open_host_science_storage(config, trace_hook=trace)
-                native = storage_set.backend.security_contract_evidence
-                custody_evidence = {"profile": native["profile"], "policySha256": native["policy_sha256"],
-                    "role": native["role"], "token": native["token"],
-                    "exactOwnerDaclLabelPolicyVerified": native["exact_owner_dacl_label_policy_verified"]}
-                recorder = ContinuousScienceRecorder(publication_root=published,
-                    science_root=Path(settings["stateRoot"]), source_root_identity=config["runtimeBuildHash"],
-                    writer_instance_id=config["host"]["instanceId"] + "-science-" + host.generation,
-                    clock=lambda: datetime.now(timezone.utc).isoformat(),
-                    custody_storage_set=storage_set, readiness_trace=readiness_trace)
+                with recovery_stage(readiness_trace, "SCIENCE_OPEN_STORAGE"):
+                    storage_set = open_host_science_storage(config, trace_hook=trace)
+                with recovery_stage(readiness_trace, "SCIENCE_SECURITY_EVIDENCE"):
+                    native = storage_set.backend.security_contract_evidence
+                    custody_evidence = {"profile": native["profile"], "policySha256": native["policy_sha256"],
+                        "role": native["role"], "token": native["token"],
+                        "exactOwnerDaclLabelPolicyVerified": native["exact_owner_dacl_label_policy_verified"]}
+                with recovery_stage(readiness_trace, "SCIENCE_RECORDER_CONSTRUCTION"):
+                    recorder = ContinuousScienceRecorder(publication_root=published,
+                        science_root=Path(settings["stateRoot"]), source_root_identity=config["runtimeBuildHash"],
+                        writer_instance_id=config["host"]["instanceId"] + "-science-" + host.generation,
+                        clock=lambda: datetime.now(timezone.utc).isoformat(),
+                        custody_storage_set=storage_set, readiness_trace=readiness_trace)
                 # Canonical cold recovery/audit, not erasure of the earlier failure receipt.
-                coverage = health_coverage(recorder.coverage())
-                if readiness_trace is not None:
-                    readiness_trace("recovery_snapshot", dependencies=bound,
-                        raw_arrival_count=coverage.get("raw_arrival_count", 0),
-                        normalized_record_count=coverage.get("normalized_record_count", 0),
-                        admitted_arrival_count=coverage.get("admitted_arrival_count", 0),
-                        historical_lineage="UNKNOWN_WITHOUT_PER_EVENT_TRACE")
-            result = recorder.poll(max_items=settings["maxItems"])
+                with recovery_stage(readiness_trace, "SCIENCE_INITIAL_COVERAGE"):
+                    coverage = health_coverage(recorder.coverage())
+                emit_readiness_trace(readiness_trace, "recovery_snapshot", dependencies=bound,
+                    raw_arrival_count=coverage.get("raw_arrival_count", 0),
+                    normalized_record_count=coverage.get("normalized_record_count", 0),
+                    admitted_arrival_count=coverage.get("admitted_arrival_count", 0),
+                    historical_lineage="UNKNOWN_WITHOUT_PER_EVENT_TRACE")
+                first_poll = True
+            if first_poll:
+                with recovery_stage(readiness_trace, "SCIENCE_FIRST_POLL"):
+                    result = recorder.poll(max_items=settings["maxItems"])
+                first_poll = False
+            else:
+                result = recorder.poll(max_items=settings["maxItems"])
             coverage = health_coverage(result["coverage"])
             state = science_state(coverage)
             status("DRAINING" if stop_deadline else state, auditRequired=False)

@@ -543,7 +543,7 @@ class ContinuousRecorderTests(unittest.TestCase):
             elif isinstance(node, ast.ImportFrom):
                 imports.append(node.module or "")
         allowed = {
-            "__future__", "base64", "collections", "pathlib", "re", "typing",
+            "__future__", "base64", "collections", "contextlib", "pathlib", "re", "typing",
             "momentum_hunter.continuous_research_export", "momentum_hunter.strategy_science_recorder.canonical",
             "momentum_hunter.strategy_science_recorder.contract", "momentum_hunter.strategy_science_recorder.coverage",
             "momentum_hunter.strategy_science_recorder.custody", "momentum_hunter.strategy_science_recorder.outcomes",

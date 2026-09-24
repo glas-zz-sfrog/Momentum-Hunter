@@ -14,6 +14,7 @@ import unittest
 from unittest.mock import MagicMock, patch
 
 from momentum_hunter import continuous_host_lifecycle as lifecycle
+from momentum_hunter.continuous_host_contract import OFFLINE
 from momentum_hunter.continuous_host_lifecycle import science_state
 from momentum_hunter.science_custody_commit import CustodyCommitIntegrityError
 from momentum_hunter.science_readiness_trace_020y import ScienceReadinessTrace, open_020y_trace
@@ -25,6 +26,13 @@ from tests.test_strategy_science_recorder_eligibility_authority import start_env
 
 
 GENERATION = "12345678-1234-1234-1234-123456789abc"
+RECOVERY_STAGES = (
+    "RECORDER_STORAGE_OPEN", "RECORDER_LEDGER_LOAD", "RECORDER_CONFIG_VALIDATE_OR_APPEND",
+    "RECORDER_PARTIAL_SCAN", "RECORDER_INITIAL_REINDEX", "RECORDER_CANONICAL_RECORDER_OPEN",
+    "RECORDER_EXISTING_SOURCE_VALIDATION", "RECORDER_CANONICAL_RECOVER",
+    "RECORDER_SUPPORT_BUILD", "RECORDER_READER_CREATE", "RECORDER_SYNCHRONIZE_RECOVERY",
+    "RECORDER_RESTART_APPEND", "RECORDER_FINAL_REINDEX", "RECORDER_FINISH_OPEN",
+)
 
 
 class ScienceReadinessTrace020YTests(unittest.TestCase):
@@ -35,7 +43,8 @@ class ScienceReadinessTrace020YTests(unittest.TestCase):
         self.published = self.root / "producer" / "published"
         self.published.mkdir(parents=True)
         self.science = self.root / "science"
-        self.config = {"host": {"instanceId": "qual-015-020y-focused"},
+        self.config = {"inputMode": OFFLINE,
+                       "host": {"instanceId": "qual-015-020y-focused"},
                        "logRoot": str(self.root / "logs")}
 
     def trace(self):
@@ -73,9 +82,11 @@ class ScienceReadinessTrace020YTests(unittest.TestCase):
         self.assertGreater(result["coverage"]["normalized_record_count"], 0)
         self.assertEqual("HEALTHY", science_state(result["coverage"]))
         rows = self.rows(trace)
+        lineage = {"source_observed", "raw_persisted", "admission_started",
+                   "normalization_completed", "normalized_observed", "trace_closed"}
         self.assertEqual(["source_observed", "raw_persisted", "admission_started",
                           "normalization_completed", "normalized_observed", "trace_closed"],
-                         [row["event"] for row in rows])
+                         [row["event"] for row in rows if row["event"] in lineage])
         self.assertEqual({GENERATION}, {row["generation"] for row in rows})
         self.assertEqual(1, len({row["raw_id"] for row in rows if "raw_id" in row}))
         self.assertEqual(1, len({row["source_id"] for row in rows if "source_id" in row}))
@@ -94,7 +105,65 @@ class ScienceReadinessTrace020YTests(unittest.TestCase):
         result = recorder.poll()
         self.assertEqual(0, result["coverage"]["raw_arrival_count"])
         self.assertEqual("STARTING", science_state(result["coverage"]))
-        self.assertEqual(["trace_closed"], [row["event"] for row in self.rows(trace)])
+        events = [row["event"] for row in self.rows(trace)]
+        self.assertEqual("trace_closed", events[-1])
+        self.assertFalse({"source_observed", "raw_persisted", "normalized_observed"} & set(events))
+
+    def test_recorder_recovery_stages_are_ordered_and_generation_bound(self):
+        trace = self.trace()
+        self.recorder(trace)
+        rows = self.rows(trace)
+        stages = [row for row in rows if row["event"].startswith("RECORDER_")]
+        self.assertEqual([event for name in RECOVERY_STAGES
+                          for event in (name + "_ENTER", name + "_EXIT")],
+                         [row["event"] for row in stages])
+        self.assertEqual({GENERATION}, {row["generation"] for row in stages})
+        self.assertEqual(list(range(1, len(rows) + 1)), [row["sequence"] for row in rows])
+        self.assertTrue(all(row["observed_at"] for row in stages))
+
+    def test_blocked_recovery_identifies_its_last_unmatched_enter(self):
+        entered, release = threading.Event(), threading.Event()
+        events = []
+        errors = []
+        original_load = ContinuousScienceRecorder._load
+
+        def blocked_load(recorder, *, force=False):
+            entered.set()
+            if not release.wait(timeout=3):
+                raise AssertionError("Blocked-stage test barrier timed out")
+            return original_load(recorder, force=force)
+
+        def construct():
+            try:
+                recorder = self.recorder(lambda event, **detail: events.append(event))
+                recorder.close()
+            except BaseException as exc:
+                errors.append(exc)
+
+        with patch.object(ContinuousScienceRecorder, "_load", blocked_load):
+            worker = threading.Thread(target=construct)
+            worker.start()
+            try:
+                self.assertTrue(entered.wait(timeout=3))
+                active = [event for event in events if event.endswith("_ENTER")]
+                completed = {event[:-5] for event in events if event.endswith("_EXIT")}
+                self.assertEqual("RECORDER_LEDGER_LOAD_ENTER", active[-1])
+                self.assertEqual(["RECORDER_LEDGER_LOAD"],
+                                 [event[:-6] for event in active if event[:-6] not in completed])
+            finally:
+                release.set()
+                worker.join(timeout=3)
+        self.assertFalse(worker.is_alive())
+        self.assertEqual([], errors)
+
+    def test_stage_trace_exception_cannot_change_recorder_result(self):
+        def failed_trace(_event, **_detail):
+            raise OSError("diagnostic transport failed")
+
+        recorder = self.recorder(failed_trace)
+        result = recorder.poll()
+        self.assertEqual(0, result["coverage"]["raw_arrival_count"])
+        self.assertEqual("STARTING", science_state(result["coverage"]))
 
     def test_failed_admission_has_no_false_normalized_observation(self):
         publication(self.published, start_envelope_v2(), 1)
@@ -271,6 +340,14 @@ class ScienceReadinessTrace020YTests(unittest.TestCase):
         self.assertEqual("UNKNOWN_WITHOUT_PER_EVENT_TRACE", snapshot[0]["historical_lineage"])
         self.assertEqual({"writer": "w", "runtime": "r"}, snapshot[0]["dependencies"])
         self.assertEqual(1, snapshot[0]["raw_arrival_count"])
+        stages = [row["event"] for row in rows if row["event"].startswith("SCIENCE_")]
+        self.assertEqual([
+            "SCIENCE_OPEN_STORAGE_ENTER", "SCIENCE_OPEN_STORAGE_EXIT",
+            "SCIENCE_SECURITY_EVIDENCE_ENTER", "SCIENCE_SECURITY_EVIDENCE_EXIT",
+            "SCIENCE_RECORDER_CONSTRUCTION_ENTER", "SCIENCE_RECORDER_CONSTRUCTION_EXIT",
+            "SCIENCE_INITIAL_COVERAGE_ENTER", "SCIENCE_INITIAL_COVERAGE_EXIT",
+            "SCIENCE_FIRST_POLL_ENTER", "SCIENCE_FIRST_POLL_EXIT",
+        ], stages)
         self.assertEqual("STOPPED", statuses[-1][0])
         self.assertEqual(0, self.health()["lost_events"])
 
@@ -329,10 +406,19 @@ class ScienceReadinessTrace020YTests(unittest.TestCase):
         report = json.loads(path.read_bytes())
         self.assertEqual(failure.receipt_diagnostic, report["receiptDiagnostic"])
 
-    def test_trace_is_absent_outside_exact_qualification_family(self):
+    def test_trace_is_active_only_for_offline_qualification_family(self):
         self.config["host"]["instanceId"] = "production"
         self.assertIsNone(open_020y_trace(self.config, generation=GENERATION))
-        self.config["host"]["instanceId"] = "qual-015-020y-focused"
+        self.config["host"]["instanceId"] = "qual-015-020aj-focused"
+        self.config["inputMode"] = "LIVE_PRODUCTION"
+        self.assertIsNone(open_020y_trace(self.config, generation=GENERATION))
+        self.config["inputMode"] = OFFLINE
+        self.config["host"]["instanceId"] = "qual-016-focused"
+        self.assertIsNone(open_020y_trace(self.config, generation=GENERATION))
+        self.config["host"]["instanceId"] = "qual-015-020aj-focused"
+        trace = open_020y_trace(self.config, generation=GENERATION)
+        self.assertIsNotNone(trace)
+        trace.close()
         with self.assertRaises(ValueError):
             open_020y_trace(self.config, generation="wrong-generation")
 

@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import base64
 from collections import Counter
+from contextlib import contextmanager
 from pathlib import Path, PurePath
 import re
 from typing import Callable, Mapping
@@ -73,6 +74,22 @@ class ContinuousScienceRecorder:
     _frozen_error = ContinuousRecorderConflict
     _read_integrity_error = ContinuousRecorderError
 
+    @contextmanager
+    def _recovery_stage(self, name: str):
+        if self._readiness_trace is not None:
+            try:
+                self._readiness_trace(name + "_ENTER")
+            except Exception:
+                pass
+        try:
+            yield
+        finally:
+            if self._readiness_trace is not None:
+                try:
+                    self._readiness_trace(name + "_EXIT")
+                except Exception:
+                    pass
+
     def __init__(
         self, publication_root: Path, science_root: Path, *,
         source_root_identity: str, writer_instance_id: str,
@@ -124,58 +141,72 @@ class ContinuousScienceRecorder:
             "execution_authority": "NONE",
         }
         self._custody_storage_set = custody_storage_set
-        if custody_storage_set is None:
-            self._storage = WriterPhysicalStorage(
-                self.science_root / "arrivals", writer_instance_id=writer_instance_id,
-                topology_fingerprint=sha256_hex(canonical_json_v1(descriptor)), topology_version=1,
-            )
-        else:
-            from momentum_hunter.science_custody_readonly import ScienceCustodyStorageSet
-            if not isinstance(custody_storage_set, ScienceCustodyStorageSet):
-                raise ContinuousRecorderError("Explicit sealed Science storage is required.")
-            self._storage = custody_storage_set.storage(
-                'arrivals', expected_root=self.science_root / 'arrivals',
-                source_root_identity=source_root_identity)
+        with self._recovery_stage("RECORDER_STORAGE_OPEN"):
+            if custody_storage_set is None:
+                self._storage = WriterPhysicalStorage(
+                    self.science_root / "arrivals", writer_instance_id=writer_instance_id,
+                    topology_fingerprint=sha256_hex(canonical_json_v1(descriptor)), topology_version=1,
+                )
+            else:
+                from momentum_hunter.science_custody_readonly import ScienceCustodyStorageSet
+                if not isinstance(custody_storage_set, ScienceCustodyStorageSet):
+                    raise ContinuousRecorderError("Explicit sealed Science storage is required.")
+                self._storage = custody_storage_set.storage(
+                    'arrivals', expected_root=self.science_root / 'arrivals',
+                    source_root_identity=source_root_identity)
         self.recorder: StrategyScienceRecorder | None = None
         self.reader: StrategyScienceSourceReaderV2 | None = None
         self._ledger_reads = None
         try:
-            self._ledger_reads = VerifiedReads(self._storage.root, aggregate_content=True)
-            self._load()
-            if self._events:
-                if self._events[0]["type"] != "CONFIG" or self._events[0]["data"] != descriptor:
-                    raise ContinuousRecorderError("Recorder source identity or policy changed.")
-            else:
-                self._append("CONFIG", descriptor)
-            partials = [{"name": p.name, "sha256": sha256_hex(p.read_bytes()),
-                         "byte_length": p.stat().st_size}
-                        for p in self._storage.iter_files(PurePath(".partial"), suffix=".tmp")]
-            if partials:
-                self._append("PARTIALS", {"classification": "NOT_ADMITTED", "files": partials})
-                self._storage.quarantine_partials()
-            self._reindex()
-            self.recorder = StrategyScienceRecorder(
-                self.science_root / "custody", source_root_identity=source_root_identity,
-                writer_instance_id=writer_instance_id, clock=clock,
-                reuse_verified_history=True,
-                custody_storage_set=custody_storage_set,
-            )
+            with self._recovery_stage("RECORDER_LEDGER_LOAD"):
+                self._ledger_reads = VerifiedReads(self._storage.root, aggregate_content=True)
+                self._load()
+            with self._recovery_stage("RECORDER_CONFIG_VALIDATE_OR_APPEND"):
+                if self._events:
+                    if self._events[0]["type"] != "CONFIG" or self._events[0]["data"] != descriptor:
+                        raise ContinuousRecorderError("Recorder source identity or policy changed.")
+                else:
+                    self._append("CONFIG", descriptor)
+            with self._recovery_stage("RECORDER_PARTIAL_SCAN"):
+                partials = [{"name": p.name, "sha256": sha256_hex(p.read_bytes()),
+                             "byte_length": p.stat().st_size}
+                            for p in self._storage.iter_files(PurePath(".partial"), suffix=".tmp")]
+                if partials:
+                    self._append("PARTIALS", {"classification": "NOT_ADMITTED", "files": partials})
+                    self._storage.quarantine_partials()
+            with self._recovery_stage("RECORDER_INITIAL_REINDEX"):
+                self._reindex()
+            with self._recovery_stage("RECORDER_CANONICAL_RECORDER_OPEN"):
+                self.recorder = StrategyScienceRecorder(
+                    self.science_root / "custody", source_root_identity=source_root_identity,
+                    writer_instance_id=writer_instance_id, clock=clock,
+                    reuse_verified_history=True,
+                    custody_storage_set=custody_storage_set,
+                )
             # Canonical recovery supports legacy profiles, so check every exact
             # source through this adapter's narrower ingress BEFORE that replay.
-            for source in self.recorder.science_root.rglob("*.source.json"):
-                raw = self.recorder._read_raw(source)
-                arrival = self._arrival_by_raw.get(sha256_hex(raw))
-                if arrival is None or arrival["disposition"] != "RECEIVED":
-                    raise ContinuousRecorderError("Recovery source lacks valid first-arrival custody.")
-                self._metadata(raw, arrival["kind"])
-            self.recorder.recover()
-            self._support = build_incremental_support(self)
-            self.reader = self._support.create_reader()
-            self._synchronize(recovery=True)
-            self._append("RESTART", {"previous_events": len(self._events),
-                                     "classification": "PROCESS_OPEN_NOT_CONTINUOUS_COVERAGE"})
-            self._reindex()
-            self._support.finish_open()
+            with self._recovery_stage("RECORDER_EXISTING_SOURCE_VALIDATION"):
+                for source in self.recorder.science_root.rglob("*.source.json"):
+                    raw = self.recorder._read_raw(source)
+                    arrival = self._arrival_by_raw.get(sha256_hex(raw))
+                    if arrival is None or arrival["disposition"] != "RECEIVED":
+                        raise ContinuousRecorderError("Recovery source lacks valid first-arrival custody.")
+                    self._metadata(raw, arrival["kind"])
+            with self._recovery_stage("RECORDER_CANONICAL_RECOVER"):
+                self.recorder.recover()
+            with self._recovery_stage("RECORDER_SUPPORT_BUILD"):
+                self._support = build_incremental_support(self)
+            with self._recovery_stage("RECORDER_READER_CREATE"):
+                self.reader = self._support.create_reader()
+            with self._recovery_stage("RECORDER_SYNCHRONIZE_RECOVERY"):
+                self._synchronize(recovery=True)
+            with self._recovery_stage("RECORDER_RESTART_APPEND"):
+                self._append("RESTART", {"previous_events": len(self._events),
+                                         "classification": "PROCESS_OPEN_NOT_CONTINUOUS_COVERAGE"})
+            with self._recovery_stage("RECORDER_FINAL_REINDEX"):
+                self._reindex()
+            with self._recovery_stage("RECORDER_FINISH_OPEN"):
+                self._support.finish_open()
         except BaseException:
             self.close()
             raise

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from contextlib import contextmanager
 from datetime import datetime, timezone
 import hashlib
 import json
@@ -10,6 +11,8 @@ from pathlib import Path
 from queue import Empty, Full, Queue
 import re
 import threading
+
+from momentum_hunter.continuous_host_contract import OFFLINE
 
 
 _GENERATION = re.compile(r"[0-9a-f-]{36}")
@@ -129,9 +132,27 @@ class ScienceReadinessTrace:
 
 def open_020y_trace(config, *, generation: str):
     instance = config.get("host", {}).get("instanceId", "")
-    if not isinstance(instance, str) or not instance.startswith("qual-015-020y-"):
+    if (config.get("inputMode") != OFFLINE or not isinstance(instance, str)
+            or not instance.startswith("qual-015-")):
         return None
     if not isinstance(generation, str) or _GENERATION.fullmatch(generation) is None:
         raise ValueError("Qualification trace requires a bound Science generation.")
     return ScienceReadinessTrace(Path(config["logRoot"]) / "science" /
                                  ("readiness-trace-" + generation + ".jsonl"), generation)
+
+
+def emit_readiness_trace(trace, event: str, **detail: object) -> None:
+    if trace is not None:
+        try:
+            trace(event, **detail)
+        except Exception:
+            pass
+
+
+@contextmanager
+def recovery_stage(trace, name: str):
+    emit_readiness_trace(trace, name + "_ENTER")
+    try:
+        yield
+    finally:
+        emit_readiness_trace(trace, name + "_EXIT")
