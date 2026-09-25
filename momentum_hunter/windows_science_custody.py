@@ -734,6 +734,7 @@ class WindowsScienceCustodyBackend:
         self._native = _Native()
         self._lock = threading.RLock()
         self._closed = False
+        self._invalidated = False
         self._pins = {}
         self._fixed_keys = frozenset()
         self._read_scopes = {}
@@ -900,6 +901,7 @@ class WindowsScienceCustodyBackend:
         try:
             self._check_pins_current(keys=keys, quick_actor=quick_actor)
         except BaseException:
+            self._invalidated = True
             if self.policy.version == mutable.VERSION:
                 self.close()
             raise
@@ -908,7 +910,8 @@ class WindowsScienceCustodyBackend:
         timing = self._qualification_pin_timing
         started = time.perf_counter_ns() if timing is not None else 0
         try:
-            _require(not self._closed, "Native custody backend is closed.")
+            _require(not self._closed and not self._invalidated,
+                     "Native custody backend is closed or invalidated.")
             _require(self.policy_sha256 == self.policy.policy_sha256, "Immutable policy drift.")
             actor_started = time.perf_counter_ns() if timing is not None else 0
             try:
@@ -1063,7 +1066,9 @@ class WindowsScienceCustodyBackend:
             self._transaction_depth += 1
             try:
                 yield
-                if self._transaction_depth == 1 and self._scoped_reads and not self._closed:
+                _require(not self._closed and not self._invalidated,
+                         "Native custody backend closed or invalidated during operation.")
+                if self._transaction_depth == 1 and self._scoped_reads:
                     self._check_pins()
             finally:
                 self._transaction_depth -= 1
@@ -1083,7 +1088,9 @@ class WindowsScienceCustodyBackend:
             self._transaction_depth += 1
             try:
                 yield
-                if self._transaction_depth == 1 and not self._closed:
+                _require(not self._closed and not self._invalidated,
+                         "Native custody backend closed or invalidated during read.")
+                if self._transaction_depth == 1:
                     self._check_pins()
             finally:
                 self._transaction_depth -= 1
@@ -1262,6 +1269,7 @@ class WindowsScienceCustodyBackend:
                     raise ScienceCustodyNativeError("Mutable slot is occupied; never overwrite.")
                 existing = self._read(namespace, relative, max(1, len(raw)), missing=False)
                 _require(existing.raw == raw, "Write-once target conflicts.")
+                self._check_pins()
                 self._native.delete(handle)
                 if not completion:
                     self.ensure_durable(namespace, relative, existing)
@@ -1297,6 +1305,7 @@ class WindowsScienceCustodyBackend:
             # No admissible request can reference this fixed derived-root name.
             # Atomic rename uses no second hard link; a completed publication
             # therefore cannot leave a scratch alias behind.
+            self._check_pins()
             self._native.delete(handle)
         finally:
             handle.close()

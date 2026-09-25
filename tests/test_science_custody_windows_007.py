@@ -558,6 +558,27 @@ class NativeBackendFlowTests(unittest.TestCase):
                 self.assertEqual(b"raw", backend.read_trusted("custody", "x.json", maximum=20).raw)
                 unrelated.identity = (9, 9, 9)
 
+    def test_explicit_close_during_nested_read_cannot_return_success(self):
+        backend, native = self.make_backend("science")
+        native.add(backend.namespace_root("custody") / "x.json", raw=b"raw")
+        with self.assertRaisesRegex(mod.ScienceCustodyNativeError, "closed or invalidated"):
+            with backend.transaction():
+                self.assertEqual(b"raw", backend.read_trusted("custody", "x.json", maximum=20).raw)
+                backend.close()
+
+    def test_caught_pin_failure_cannot_return_after_root_restoration(self):
+        backend, native = self.make_backend("science")
+        root = native.objects[mod._path_key(backend.namespace_root("custody"))]
+        original = root.identity
+        native.add(backend.namespace_root("custody") / "x.json", raw=b"raw")
+        with self.assertRaisesRegex(mod.ScienceCustodyNativeError, "closed or invalidated"):
+            with backend.transaction():
+                root.identity = (9, 9, 9)
+                with self.assertRaises(mod.ScienceCustodyNativeError):
+                    backend.read_trusted("custody", "x.json", maximum=20)
+                root.identity = original
+        self.assertTrue(backend._invalidated)
+
     def test_unchanged_native_token_fingerprint_reuses_full_admission_only_within_read(self):
         backend, native = self.make_backend("science")
         native.add(backend.namespace_root("custody") / "x.json", raw=b"raw")
@@ -633,6 +654,39 @@ class NativeBackendFlowTests(unittest.TestCase):
             backend.delete_transport("staging", name,
                                      expected_identity=staged.identity,
                                      expected_sha256=sha256(staged.raw))
+        self.assertEqual([], native.deletes)
+
+    def test_drift_during_duplicate_read_blocks_private_delete(self):
+        backend, native = self.make_backend("writer")
+        relative = "sessions/scope/final.json"
+        backend.create_trusted("custody", relative, b"raw")
+        target = backend.namespace_root("custody") / relative
+        root = native.objects[mod._path_key(backend.namespace_root("arrivals"))]
+        original_read = native.read
+        def drift(handle, maximum):
+            raw = original_read(handle, maximum)
+            if mod._path_key(handle.obj.path) == mod._path_key(target):
+                root.identity = (9, 9, 9)
+            return raw
+        native.read = drift
+        with self.assertRaises(mod.ScienceCustodyNativeError):
+            backend.create_trusted("custody", relative, b"raw")
+        self.assertEqual([], native.deletes)
+
+    def test_drift_during_scratch_validation_blocks_delete(self):
+        backend, native = self.make_backend("science")
+        scratch = native.add(backend.derived_root / ".custody-transport.tmp",
+                             kind="transport", raw=b"partial")
+        root = native.objects[mod._path_key(backend.namespace_root("custody"))]
+        original_security = native.security
+        def drift(handle):
+            result = original_security(handle)
+            if handle.obj is scratch:
+                root.identity = (9, 9, 9)
+            return result
+        native.security = drift
+        with self.assertRaises(mod.ScienceCustodyNativeError):
+            backend._recover_transport_scratch()
         self.assertEqual([], native.deletes)
 
     def test_copy_never_reuses_source_object_and_closes_all_file_handles(self):

@@ -11,7 +11,7 @@ from momentum_hunter import continuous_host_contract as host
 from momentum_hunter import windows_science_custody as custody
 from momentum_hunter import windows_writer_profile as actors
 from tests.test_continuous_host_boundaries import configuration, seal
-from tests.test_science_mutable_policy_020g import BNative, admission, policy
+from tests.test_science_mutable_policy_020g import BNative, admission, policy, security
 from tests.test_windows_writer_profile_016d import token
 
 
@@ -234,6 +234,97 @@ class DecodedNativeAdmissionTests(unittest.TestCase):
                 backend.create_transport('requests', 'request.json', b'raw')
         self.assertTrue(backend._closed)
         self.assertTrue(all(h.closed for h in self.native.handles.values()))
+
+    def test_stable_token_cannot_hide_generation_drift_at_outer_return(self):
+        generation = [1]
+        def observed(native, role, profile, token_observation, **kwargs):
+            result = admission(native, role, profile, token_observation, **kwargs)
+            result['identity']['generation'] = generation[0]
+            return result
+        with patch.object(custody, 'observe_actor', side_effect=observed):
+            backend = self.start()
+            target = self.native.add(backend.namespace_root('custody') / 'x.json', raw=b'raw')
+            target.security = security('trusted')
+            observed_token = self.native.token()
+            self.native.token_fingerprint = lambda: {
+                key: observed_token[key] for key in ('thread_token', 'token_id',
+                    'authentication_id', 'modified_id', 'token_type')}
+            with self.assertRaisesRegex(custody.ScienceCustodyNativeError, 'generation changed'):
+                with backend.transaction():
+                    self.assertEqual(b'raw', backend.read_trusted('custody', 'x.json', maximum=20).raw)
+                    generation[0] = 2
+                    self.assertEqual(b'raw', backend.read_trusted('custody', 'x.json', maximum=20).raw)
+        self.assertTrue(backend._closed)
+
+    def test_stable_token_cannot_hide_generation_drift_before_effect(self):
+        generation = [1]
+        def observed(native, role, profile, token_observation, **kwargs):
+            result = admission(native, role, profile, token_observation, **kwargs)
+            result['identity']['generation'] = generation[0]
+            return result
+        with patch.object(custody, 'observe_actor', side_effect=observed):
+            backend = self.start()
+            observed_token = self.native.token()
+            self.native.token_fingerprint = lambda: {
+                key: observed_token[key] for key in ('thread_token', 'token_id',
+                    'authentication_id', 'modified_id', 'token_type')}
+            with self.assertRaisesRegex(custody.ScienceCustodyNativeError, 'generation changed'):
+                with backend.transaction():
+                    generation[0] = 2
+                    backend.create_transport('requests', 'request.json', b'raw')
+        self.assertNotIn(custody._path_key(backend.namespace_root('requests') / 'request.json'),
+                         self.native.objects)
+        self.assertTrue(backend._closed)
+
+    def test_stable_token_cannot_hide_actor_service_drift_at_outer_return(self):
+        service_state = ['RUNNING']
+        def observed(native, role, profile, token_observation, **kwargs):
+            result = admission(native, role, profile, token_observation, **kwargs)
+            result['identity']['service_state'] = service_state[0]
+            return result
+        with patch.object(custody, 'observe_actor', side_effect=observed):
+            backend = self.start()
+            target = self.native.add(backend.namespace_root('custody') / 'x.json', raw=b'raw')
+            target.security = security('trusted')
+            observed_token = self.native.token()
+            self.native.token_fingerprint = lambda: {
+                key: observed_token[key] for key in ('thread_token', 'token_id',
+                    'authentication_id', 'modified_id', 'token_type')}
+            with self.assertRaisesRegex(custody.ScienceCustodyNativeError, 'generation changed'):
+                with backend.transaction():
+                    backend.read_trusted('custody', 'x.json', maximum=20)
+                    service_state[0] = 'STOPPED'
+                    backend.read_trusted('custody', 'x.json', maximum=20)
+        self.assertTrue(backend._closed)
+
+    def test_v2_relevant_ancestor_security_drift_blocks_scoped_read(self):
+        backend = self.start()
+        target = self.native.add(backend.namespace_root('custody') / 'x.json', raw=b'raw')
+        target.security = security('trusted')
+        ancestor_key = next(key for key in backend._read_scopes['custody']
+                            if key != custody._path_key(backend.namespace_root('custody')))
+        ancestor = self.native.objects[ancestor_key]
+        with self.assertRaises(custody.ScienceCustodyNativeError):
+            with backend.transaction():
+                ancestor.security = replace(ancestor.security,
+                    sddl=ancestor.security.sddl + 'changed',
+                    labels=((3, 1, 'S-1-16-8192'),))
+                backend.read_trusted('custody', 'x.json', maximum=20)
+        self.assertTrue(backend._closed)
+
+    def test_caught_v2_invalidation_cannot_return_after_restoration(self):
+        backend = self.start()
+        root = self.native.objects[custody._path_key(backend.namespace_root('custody'))]
+        original = root.identity
+        target = self.native.add(backend.namespace_root('custody') / 'x.json', raw=b'raw')
+        target.security = security('trusted')
+        with self.assertRaisesRegex(custody.ScienceCustodyNativeError, 'closed or invalidated'):
+            with backend.transaction():
+                root.identity = (9, 9, 9)
+                with self.assertRaises(custody.ScienceCustodyNativeError):
+                    backend.read_trusted('custody', 'x.json', maximum=20)
+                root.identity = original
+        self.assertTrue(backend._closed)
 
     def test_valid_native_admission_preserves_role_specific_pins(self):
         backend = self.start()
