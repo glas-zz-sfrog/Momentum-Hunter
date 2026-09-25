@@ -84,6 +84,7 @@ class HandoffAcquisitionTests(unittest.TestCase):
         backend.max_artifact_bytes, backend.max_request_bytes = 4096, 2048
         backend._native = native
         backend.transaction = nullcontext
+        backend._read_scope = lambda _namespace: nullcontext()
         backend._directory = lambda ns, parts: SimpleNamespace(path=Path(p.root(ns).path)) if not parts else None
         path = Path(p.root('staging').path) / name
         obj = native.add(path, kind='transport', raw=raw)
