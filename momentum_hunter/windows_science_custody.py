@@ -1047,6 +1047,7 @@ class WindowsScienceCustodyBackend:
                  and self._lease is not None, "B Reader acquisition requires its admitted Science owner.")
         with self.transaction():
             path = self.derived_root / ".reader.lock"
+            self._check_pins()
             handle = self._native.open(path, access=mutable.READER_LOCK_ACCESS,
                                        share=3, disposition=4, sddl=None)
             try:
@@ -1060,9 +1061,13 @@ class WindowsScienceCustodyBackend:
     @contextmanager
     def transaction(self) -> Iterator[None]:
         with self._lock:
-            self._check_pins()
             if self._transaction_depth == 0:
+                self._check_pins()
                 self._scoped_reads = False
+            else:
+                # Inner protocol operations share the outer lock and lifetime.
+                # Reads check their path scope; effects check all pins directly.
+                self._scoped_reads = True
             self._transaction_depth += 1
             try:
                 yield
@@ -1149,19 +1154,23 @@ class WindowsScienceCustodyBackend:
         From here onward only this handle supplies identity and bytes, including
         after a peer renames the file or replaces its former directory entry.
         """
-        def identity():
+        def identity(*, acquired: bool):
             info = self._native.information(handle)
             _require(not info.dwFileAttributes & (REPARSE | DIRECTORY),
                      "Handoff must be an ordinary non-reparse file.")
-            _require(info.nNumberOfLinks == 1, "Handoff hard-link alias rejected.")
+            # The acquired handle can outlive Science's exact-object transport
+            # retirement. Zero links after the read is not an alias; two are.
+            allowed_links = (1,) if acquired else (0, 1)
+            _require(info.nNumberOfLinks in allowed_links,
+                     f"Handoff hard-link alias rejected (links={info.nNumberOfLinks}).")
             value = self._native.identity(handle)
             _require(value[0] == volume, "Handoff volume differs from its pinned namespace.")
             return value
 
-        before = identity()
+        before = identity(acquired=True)
         security = self._native.security(handle)
         raw = self._native.read(handle, maximum)
-        _require(identity() == before, "Acquired handoff object identity changed.")
+        _require(identity(acquired=False) == before, "Acquired handoff object identity changed.")
         return CustodyObjectEvidence(raw, before, security.owner, security.digest)
 
     def _read(self, namespace: str, relative: str, maximum: int, *, missing: bool):
@@ -1215,6 +1224,7 @@ class WindowsScienceCustodyBackend:
 
     def _publish_copy(self, namespace: str, relative: str, raw: bytes, *, transport: bool,
                       completion: bool = False):
+        self._check_pins()
         parts = _relative(relative)
         parent = self._directory(namespace, parts[:-1], create=not transport)
         _require(parent is not None, "Bound publish parent is absent.")
@@ -1336,6 +1346,7 @@ class WindowsScienceCustodyBackend:
             try:
                 before = self._snapshot(handle, path, "trusted", max(1, len(expected.raw)))
                 _require(before == expected, "Durability target no longer matches its exact object.")
+                self._check_pins()
                 self._native.checked(self._native.k.FlushFileBuffers(handle.value),
                                      "Flush existing committed object")
                 after = self._snapshot(handle, path, "trusted", max(1, len(expected.raw)))

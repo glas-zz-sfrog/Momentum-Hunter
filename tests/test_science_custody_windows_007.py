@@ -457,7 +457,7 @@ class NativeBackendFlowTests(unittest.TestCase):
         with self.assertRaises(mod.ScienceCustodyNativeError):
             backend.read_trusted("custody", "x.json", maximum=20)
 
-    def test_nested_transactions_validate_fixed_pins_before_each_operation(self):
+    def test_nested_transactions_share_outer_validation_and_recheck_on_return(self):
         backend, native = self.make_backend("science")
         fixed = len(backend._fixed_keys)
         before = native.security_calls
@@ -465,13 +465,13 @@ class NativeBackendFlowTests(unittest.TestCase):
             with backend.transaction():
                 with backend.transaction():
                     pass
-        self.assertEqual(3 * fixed, native.security_calls - before)
+        self.assertEqual(2 * fixed, native.security_calls - before)
         before = native.security_calls
         with backend.transaction():
             pass
         self.assertEqual(fixed, native.security_calls - before)
 
-    def test_qualification_timing_observes_without_skipping_nested_checks(self):
+    def test_qualification_timing_observes_outer_boundary_checks(self):
         backend, native = self.make_backend("science")
         self.assertEqual({}, backend.qualification_pin_timing())
         backend.enable_qualification_pin_timing()
@@ -500,6 +500,19 @@ class NativeBackendFlowTests(unittest.TestCase):
         self.assertNotIn(mod._path_key(target), native.objects)
         self.assertEqual(0, backend._transaction_depth)
 
+    def test_nested_transaction_rejects_drift_before_private_copy_write(self):
+        backend, native = self.make_backend("science")
+        root = native.objects[mod._path_key(backend.namespace_root("custody"))]
+        writes = native.write
+        native.write = lambda *args: self.fail("Drift reached private copy write")
+        try:
+            with self.assertRaises(mod.ScienceCustodyNativeError):
+                with backend.transaction():
+                    root.identity = (9, 9, 9)
+                    backend.create_transport("requests", "request.json", b"raw")
+        finally:
+            native.write = writes
+
     def test_nested_transaction_rejects_actor_drift_before_read(self):
         backend, native = self.make_backend("science")
         observed = native.token()
@@ -520,7 +533,8 @@ class NativeBackendFlowTests(unittest.TestCase):
         self.assertLess(scoped, fixed)
         with backend.transaction():
             for _ in range(40):
-                self.assertEqual(b"raw", backend.read_trusted("custody", "x.json", maximum=20).raw)
+                with backend.transaction():
+                    self.assertEqual(b"raw", backend.read_trusted("custody", "x.json", maximum=20).raw)
         profile = backend.qualification_pin_timing()
         self.assertEqual(2, profile["full_checks"])
         self.assertEqual(40, profile["scoped_read_checks"])

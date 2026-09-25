@@ -181,6 +181,23 @@ class HandoffAcquisitionTests(unittest.TestCase):
         with self.assertRaises(custody.ScienceCustodyNativeError):
             self.read(b, path)
 
+    def test_retired_acquired_object_is_readable_but_new_hardlink_is_rejected(self):
+        for after_links in (0, 2):
+            with self.subTest(after_links=after_links):
+                b, n, path, obj = self.setup_input()
+                original = n.read
+                def read(handle, maximum):
+                    raw = original(handle, maximum)
+                    obj.links = after_links
+                    return raw
+                n.read = read
+                if after_links == 0:
+                    self.assertEqual(b'candidate', self.read(b, path).raw)
+                else:
+                    with self.assertRaisesRegex(custody.ScienceCustodyNativeError,
+                                                'hard-link alias rejected'):
+                        self.read(b, path)
+
     def test_minimum_read_handle_no_mutation_and_no_write_sharing(self):
         b, n, path, obj = self.setup_input()
         self.read(b, path)
@@ -258,3 +275,21 @@ class HandoffAcquisitionTests(unittest.TestCase):
                 self.assertEqual(identity, value.file_identity)
                 self.assertEqual(b'original', value.raw)
             finally: h.close()
+
+    @unittest.skipUnless(os.name == 'nt', 'Own disposable native file; no service or ACL changes')
+    def test_real_handle_link_count_after_source_retirement(self):
+        native = custody._Native()
+        with tempfile.TemporaryDirectory(prefix='argus-016e-retire-') as directory:
+            path = Path(directory) / ('a' * 32 + '.stage')
+            creator = native.open(path, access=0xC0030000, share=7, disposition=1)
+            try: native.write(creator, b'original')
+            finally: creator.close()
+            reader = native.open(path, access=0x120081, share=5)
+            try:
+                self.assertEqual(1, native.information(reader).nNumberOfLinks)
+                retiring = native.open(path, access=custody.READ | custody.DELETE, share=7)
+                try: native.delete(retiring)
+                finally: retiring.close()
+                self.assertEqual(0, native.information(reader).nNumberOfLinks)
+                self.assertEqual(b'original', native.read(reader, 100))
+            finally: reader.close()
