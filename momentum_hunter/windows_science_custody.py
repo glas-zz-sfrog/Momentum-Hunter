@@ -17,6 +17,7 @@ import threading
 import time
 from contextlib import contextmanager
 from dataclasses import asdict, dataclass
+from functools import lru_cache
 from pathlib import Path, PureWindowsPath
 from typing import Iterator, Literal
 
@@ -97,7 +98,15 @@ def _absolute(value: str) -> str:
 
 
 def _path_key(value: str | Path) -> str:
-    return str(PureWindowsPath(str(value))).casefold()
+    text = str(value)
+    return (_path_text_key(text) if len(text) <= 4096
+            else str(PureWindowsPath(text)).casefold())
+
+
+@lru_cache(maxsize=1024)
+def _path_text_key(value: str) -> str:
+    # Pure spelling only: never cache a Path object or filesystem observation.
+    return str(PureWindowsPath(value)).casefold()
 
 
 def _io_path(value: Path) -> str:
@@ -1159,6 +1168,12 @@ class WindowsScienceCustodyBackend:
                 return self._native.reader_stream(handle)
             finally:
                 handle.close()
+
+    @contextmanager
+    def read_operation(self) -> Iterator[None]:
+        _require(self.role == "science", "Only the non-owner reader groups recorder operations.")
+        with self.transaction():
+            yield
 
     @contextmanager
     def transaction(self) -> Iterator[None]:

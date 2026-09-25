@@ -5,7 +5,7 @@ An outstanding publication is acknowledged only after the owner has completed
 its exact readback and Science005 singleton registration/notification drain.
 Legacy offline storage remains a distinct, non-physical-isolation mode.
 """
-from contextlib import contextmanager
+from contextlib import contextmanager, nullcontext
 from dataclasses import dataclass
 import hashlib
 from pathlib import Path, PurePath
@@ -259,7 +259,11 @@ class SealedScienceStorage:
         if self._closed:
             raise WriterPhysicalStorageError('Sealed Science view is closed.')
         self.storage_set._ensure_open()
-        with self.storage_set._lock:
+        # One logical recorder operation shares topology/actor boundaries.
+        # Nested reads still validate their current namespace before bytes;
+        # effects and the outer return retain full fresh native validation.
+        operation = getattr(self.storage_set.backend, 'read_operation', nullcontext)
+        with self.storage_set._lock, operation():
             yield
 
     def atomic_create(self, relative_path, data, *, crash_after_temp=False):
