@@ -359,11 +359,13 @@ class _ScienceCustodyWorker:
     STOP_WAIT_SECONDS = 0.25
 
     def __init__(self, policy: ScienceCustodyPolicy, *, trace_hook=None,
-                 diagnostic_root: Path | None = None, generation: str | None = None) -> None:
+                 diagnostic_root: Path | None = None, generation: str | None = None,
+                 qualification_profile=None) -> None:
         self._policy = policy
         self._trace_hook = trace_hook
         self._diagnostic_root = diagnostic_root
         self._generation = generation
+        self._qualification_profile = qualification_profile
         self._stop = threading.Event()
         self._status_lock = threading.Lock()
         self._status: dict[str, object] = {
@@ -382,6 +384,8 @@ class _ScienceCustodyWorker:
         except Exception as exc:
             self._set_status(state="START_FAILED", lastError=type(exc).__name__)
             self._record_failure(exc, operation="START")
+            if self._qualification_profile is not None:
+                self._qualification_profile.close()
 
     def _record_failure(self, exc: BaseException, *, operation: str) -> None:
         if self._diagnostic_root is None:
@@ -437,7 +441,8 @@ class _ScienceCustodyWorker:
                 operation = "POLL"
                 self._set_status(state="POLLING", inFlight=True)
                 try:
-                    result = channel.poll_once()
+                    result = (channel.poll_once() if self._qualification_profile is None
+                              else self._qualification_profile.poll(channel.poll_once))
                 except (CustodyCommitPending, OSError) as exc:
                     self._increment("errorCount")
                     self._set_status(state="DEGRADED", lastError=type(exc).__name__)
@@ -472,6 +477,8 @@ class _ScienceCustodyWorker:
                 close_trace = getattr(self._trace_hook, "close", None)
                 if close_trace is not None:
                     close_trace()
+                if self._qualification_profile is not None:
+                    self._qualification_profile.close()
             if not failed:
                 self._set_status(state="STOPPED", inFlight=False)
 
@@ -485,6 +492,7 @@ class ProductionWriterServer:
         native_writer_admission=None,
         custody_trace_hook=None,
         custody_generation: str | None = None,
+        qualification_profile=None,
     ) -> None:
         self.config = config
         self._native_writer_admission = native_writer_admission
@@ -517,6 +525,7 @@ class ProductionWriterServer:
                 diagnostic_root=(Path(str(config["logRoot"])) / "writer"
                                  if "logRoot" in config else self.root / "status"),
                 generation=custody_generation,
+                qualification_profile=qualification_profile,
             )
         )
 
@@ -1221,15 +1230,19 @@ def run_writer(config_path: Path, stop=None, host=None) -> int:
     policy = science_custody_policy(config)
     from momentum_hunter.science_custody_trace_020u import open_020u_trace
     trace = open_020u_trace(config, role="writer", generation=host.generation if host else "")
+    from momentum_hunter.science_writer_profile_r19 import open_writer_startup_profile
+    profile = None
     from momentum_hunter.windows_writer_profile import NativeWriterAdmission
     admission = None
     server = None
     complete = False
     try:
         admission = None if policy is None else NativeWriterAdmission(config, policy)
+        profile = open_writer_startup_profile(config, generation=host.generation if host else "")
         server = ProductionWriterServer(config, science_custody_policy=policy,
                                         native_writer_admission=admission, custody_trace_hook=trace,
-                                        custody_generation=host.generation if host else None)
+                                        custody_generation=host.generation if host else None,
+                                        qualification_profile=profile)
         complete = server.serve_forever(str(config["ipcHost"]), int(config["ipcPort"]), stop, host)
     finally:
         try:
@@ -1242,6 +1255,8 @@ def run_writer(config_path: Path, stop=None, host=None) -> int:
             finally:
                 if trace is not None and server is None:
                     trace.close()
+                if profile is not None and server is None:
+                    profile.close()
     custody = server.science_custody_status
     custody_closed = custody["state"] in ("DISABLED", "STOPPED") and not custody["threadAlive"]
     complete = bool(complete and custody_closed)
