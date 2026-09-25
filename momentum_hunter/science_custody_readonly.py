@@ -59,7 +59,7 @@ This class never constructs a Writer backend, changes ACLs or activates it.
 The caller owns this object's lifetime independently of recorder views.
 """
     def __init__(self, client: ScienceCustodyMailboxClient, *,
-                 timeout_seconds: float = 10.0, poll_seconds: float = 0.1,
+                 timeout_seconds: float = 10.0, poll_seconds: float = 0.01,
                  recovery_clock=None, readiness_trace=None):
         if not isinstance(client, ScienceCustodyMailboxClient):
             raise CustodyCommitError('An explicit Science mailbox client is required.')

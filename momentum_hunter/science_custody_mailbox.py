@@ -9,6 +9,7 @@ must still run the existing complete scientific recovery/audit.
 from __future__ import annotations
 
 import re
+import time
 import uuid
 from dataclasses import dataclass
 from typing import Callable, Protocol
@@ -70,24 +71,49 @@ class ScienceCustodyMailboxWriter:
             raise CustodyCommitError("Mailbox and finalizer must share their native policy/lease.")
         self.finalizer = finalizer
         self.backend = mailbox_backend
+        self._delivered_request = None
+        self._reconcile_delivered_at = 0.0
 
-    def poll_once(self) -> CustodyCommitResult | None:
+    def poll_once(self, *, new_work_only: bool = False) -> CustodyCommitResult | None:
+        try:
+            with self.backend.transaction():
+                return self._poll_once(new_work_only=new_work_only)
+        except BaseException:
+            self._delivered_request = None
+            raise
+
+    def _poll_once(self, *, new_work_only: bool) -> CustodyCommitResult | None:
         names = _names(self.backend, "requests", capacity=1)
         _names(self.backend, "staging", capacity=2)
         if not names:
+            self._delivered_request = None
             return None
         try:
             evidence = self.backend.read_request(REQUEST_NAME, maximum=self.backend.max_request_bytes)
         except FileNotFoundError:
             # Client may have retired the exact receipt between enumeration and
             # opening. No input or outcome is inferred from this transient absence.
+            self._delivered_request = None
             return None
+        if (new_work_only and evidence == self._delivered_request
+                and time.monotonic() < self._reconcile_delivered_at):
+            # Fresh native acquisition still validates the bounded slot and
+            # actor. This is no new work, NOT a cached reconciliation result.
+            # Science must verify and retire transport before publishing next.
+            # A bounded full recheck retains missing-completion recovery and
+            # trusted-object drift detection even when the slot never changes.
+            return None
+        self._delivered_request = None
         request = CustodyCommitRequest.from_bytes(evidence.raw, max_bytes=self.backend.max_request_bytes)
         # Finalizer pins and independently verifies the separately staged object.
         # Writer never deletes a request/stage by its mutable pathname.
-        return self.finalizer.finalize(request)
+        result = self.finalizer.finalize(request)
+        self._delivered_request = evidence
+        self._reconcile_delivered_at = time.monotonic() + 1.0
+        return result
 
     def close(self) -> None:
+        self._delivered_request = None
         self.backend.close()
 
 

@@ -16,7 +16,31 @@ class ScienceCustodyStartupPollTests(unittest.TestCase):
         return CustodyPendingRequest(request, (1, 2, 3), (1, 2, 4))
 
     def test_default_poll_cadence_is_bounded(self):
-        self.assertEqual(0.1, ScienceCustodyStorageSet.__init__.__kwdefaults__['poll_seconds'])
+        self.assertEqual(0.01, ScienceCustodyStorageSet.__init__.__kwdefaults__['poll_seconds'])
+
+    def test_fast_default_hint_wait_keeps_sparse_proofs_and_original_deadline(self):
+        now = [0.0]
+        hints = []
+        proofs = []
+        waits = []
+        def sleep(seconds):
+            waits.append(seconds)
+            now[0] += seconds
+        storage = SimpleNamespace(
+            backend=SimpleNamespace(completion_hint=lambda key: hints.append(key) or False),
+            client=SimpleNamespace(reconcile=lambda pending: proofs.append(now[0]) or None),
+            timeout_seconds=2.5,
+            poll_seconds=ScienceCustodyStorageSet.__init__.__kwdefaults__['poll_seconds'],
+            _stage=lambda *_: nullcontext())
+        with patch('momentum_hunter.science_custody_readonly.time.monotonic', side_effect=lambda: now[0]), \
+                patch('momentum_hunter.science_custody_readonly.time.sleep', side_effect=sleep):
+            with self.assertRaises(CustodyCommitPending):
+                ScienceCustodyStorageSet._await(storage, self.pending())
+        self.assertLessEqual(len(hints), 251)
+        self.assertEqual(3, len(proofs))
+        self.assertAlmostEqual(2.5, sum(waits))
+        self.assertTrue(all(0 < wait <= 0.01 for wait in waits))
+        self.assertAlmostEqual(2.5, proofs[-1])
 
     def test_pending_outcome_preserves_deadline_without_busy_reconciliation(self):
         now = [0.0]

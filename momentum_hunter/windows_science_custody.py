@@ -1545,10 +1545,10 @@ class _WriterChannel:
         self._mailbox = mailbox
 
     def poll_once(self):
-        return self._mailbox.poll_once()
+        return self._mailbox.poll_once(new_work_only=True)
 
     def close(self):
-        self._backend.close()
+        self._mailbox.close()
 
 
 def open_science_custody_writer(policy: ScienceCustodyPolicy, *, trace_hook=None):
