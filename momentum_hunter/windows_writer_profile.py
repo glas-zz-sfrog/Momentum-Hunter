@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import ctypes as c
 from contextlib import ExitStack
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, fields, is_dataclass
 import hashlib
 import json
 import os
@@ -614,11 +614,43 @@ def _scm(native, binding):
         native.checked(native.a.CloseServiceHandle(manager), "Close SCM manager")
 
 
-def observe_actor(native, role, profile, observed, *, require_generation=True, check_images=True):
+def _proof_value(value):
+    """Detached, type-exact value key; never retain mutable input references."""
+    kind = type(value)
+    if kind in {str, int, bool, bytes, type(None)}:
+        return kind, value
+    if kind is tuple:
+        return kind, tuple(_proof_value(item) for item in value)
+    if kind is dict:
+        require(all(type(key) is str for key in value), "Invalid proof dictionary key.")
+        return kind, tuple((key, _proof_value(value[key])) for key in sorted(value))
+    if is_dataclass(value) and not isinstance(value, type) and value.__dataclass_params__.frozen:
+        return kind, tuple((field.name, _proof_value(getattr(value, field.name))) for field in fields(value))
+    raise WriterProfileError("Unsupported mutable native proof input.")
+
+
+class ActorProofCache:
+    """One exact accepted value per pure check, not a cached actor observation."""
+    def __init__(self):
+        self.profile = None
+        self.token = None
+        self.generation = None
+
+
+def observe_actor(native, role, profile, observed, *, require_generation=True, check_images=True,
+                  proof_cache=None):
     require(type(profile) is ScmRoleProfile, "Frozen native role profile required.")
-    profile.__post_init__()
+    profile_key = _proof_value(profile) if proof_cache is not None else None
+    if proof_cache is None or proof_cache.profile != profile_key:
+        profile.__post_init__()
+        if proof_cache is not None:
+            proof_cache.profile = profile_key
     binding = getattr(profile, role)
-    validate_token(observed, role, binding)
+    token_key = (role, _proof_value(binding), _proof_value(observed)) if proof_cache is not None else None
+    if proof_cache is None or proof_cache.token != token_key:
+        validate_token(observed, role, binding)
+        if proof_cache is not None:
+            proof_cache.token = token_key
     scm = _scm(native, binding)
     current = _process(native, os.getpid())
     parent = _process(native, scm["pid"])
@@ -636,27 +668,34 @@ def observe_actor(native, role, profile, observed, *, require_generation=True, c
         with path.open("rb") as stream:
             raw = stream.read(16385)
         require(len(raw) <= 16384, "Unbounded generation record.")
-        record = json.loads(raw)
-        require(type(record) is dict and record.get("role") == role, "Role generation missing.")
-        from momentum_hunter.continuous_host_contract import host_fingerprint
         with Path(profile.configuration_path).open("rb") as stream:
             config_bytes = stream.read(1048577)
         require(len(config_bytes) <= 1048576, "Unbounded role configuration.")
-        configuration = json.loads(config_bytes)
-        require(configuration.get("hostFingerprint") == host_fingerprint(configuration)
-                and record.get("hostFingerprint") == configuration["hostFingerprint"]
-                and record.get("phase") in {"RUNNING", "STOP_REQUESTED"},
-                "Generation configuration/phase binding invalid.")
-        generation = record.get("generation")
-        require(type(generation) is str and str(uuid.UUID(generation)) == generation, "Generation identity invalid.")
-        if role == "science":
-            require(record.get("executionModel") == "SCM_DIRECT_SCIENCE_SERVICE_PROCESS"
-                    and record.get("servicePid") == current["pid"] and record.get("serviceBirth") == current["birth"],
-                    "Science generation does not bind native process.")
+        generation_key = (role, str(path), profile.configuration_path, raw, config_bytes,
+                          _proof_value(current), _proof_value(parent))
+        if proof_cache is not None and proof_cache.generation is not None and proof_cache.generation[0] == generation_key:
+            generation = proof_cache.generation[1]
         else:
-            require(record.get("supervisorPid") == parent["pid"] and record.get("supervisorBirth") == parent["birth"]
-                    and record.get("childPid") == current["pid"] and record.get("childBirth") == current["birth"],
-                    "Writer generation does not bind native process and parent.")
+            record = json.loads(raw)
+            require(type(record) is dict and record.get("role") == role, "Role generation missing.")
+            from momentum_hunter.continuous_host_contract import host_fingerprint
+            configuration = json.loads(config_bytes)
+            require(configuration.get("hostFingerprint") == host_fingerprint(configuration)
+                    and record.get("hostFingerprint") == configuration["hostFingerprint"]
+                    and record.get("phase") in {"RUNNING", "STOP_REQUESTED"},
+                    "Generation configuration/phase binding invalid.")
+            generation = record.get("generation")
+            require(type(generation) is str and str(uuid.UUID(generation)) == generation, "Generation identity invalid.")
+            if role == "science":
+                require(record.get("executionModel") == "SCM_DIRECT_SCIENCE_SERVICE_PROCESS"
+                        and record.get("servicePid") == current["pid"] and record.get("serviceBirth") == current["birth"],
+                        "Science generation does not bind native process.")
+            else:
+                require(record.get("supervisorPid") == parent["pid"] and record.get("supervisorBirth") == parent["birth"]
+                        and record.get("childPid") == current["pid"] and record.get("childBirth") == current["birth"],
+                        "Writer generation does not bind native process and parent.")
+            if proof_cache is not None:
+                proof_cache.generation = generation_key, generation
     return {"profile": PROFILE, "role": role, "token": observed, "scm": scm,
             "process": current, "parent": parent, "generation": generation,
             "provenance": "ACTUAL_NATIVE_PROCESS_TOKEN_AND_SCM_QUERY"}

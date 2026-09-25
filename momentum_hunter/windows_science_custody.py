@@ -22,7 +22,7 @@ from typing import Iterator, Literal
 
 from momentum_hunter.windows_writer_profile import (
     ScmRoleProfile, _extended_token, access_decisions, admission_identity,
-    encode_profile, observe_actor, service_sid, MUTATION_RIGHTS,
+    encode_profile, observe_actor, service_sid, MUTATION_RIGHTS, ActorProofCache, _proof_value,
 )
 
 from momentum_hunter import windows_writer_storage as storage
@@ -398,6 +398,7 @@ class _Native:
                   [c.c_void_p, c.POINTER(w.BOOL), c.POINTER(c.c_void_p), c.POINTER(w.BOOL)], w.BOOL)
         self.bind(self.a, "GetSecurityDescriptorControl",
                   [c.c_void_p, c.POINTER(w.WORD), c.POINTER(w.DWORD)], w.BOOL)
+        self.bind(self.a, "GetSecurityDescriptorLength", [c.c_void_p], w.DWORD)
         self.bind(self.a, "GetAce", [c.c_void_p, w.DWORD, c.POINTER(c.c_void_p)], w.BOOL)
         self.bind(self.a, "ConvertSidToStringSidW",
                   [c.c_void_p, c.POINTER(w.LPWSTR)], w.BOOL)
@@ -419,6 +420,8 @@ class _Native:
                   [w.HANDLE, c.c_int, c.c_void_p, w.DWORD, c.POINTER(w.DWORD)], w.BOOL)
         self.bind(self.a, "LookupPrivilegeNameW",
                   [w.LPCWSTR, c.c_void_p, w.LPWSTR, c.POINTER(w.DWORD)], w.BOOL)
+        self._token_cache = None
+        self._security_cache = {}
 
     @staticmethod
     def bind(lib, name, args, restype):
@@ -445,6 +448,19 @@ class _Native:
             self.k.LocalFree(c.cast(text, c.c_void_p))
 
     def token(self) -> dict[str, object]:
+        fingerprint = self.token_fingerprint()
+        if self._token_cache is not None and self._token_cache[0] == fingerprint:
+            return dict(self._token_cache[1])
+        observed = self._read_token()
+        # ModifiedId changes on every token modification, including A->B->A.
+        # Cache only an inventory bracketed by matching native statistics.
+        _require(all(observed.get(key) == value for key, value in fingerprint.items())
+                 and self.token_fingerprint() == fingerprint,
+                 "Native token changed while its inventory was being read.")
+        self._token_cache = dict(fingerprint), dict(observed)
+        return observed
+
+    def _read_token(self) -> dict[str, object]:
         w = self.w
         token = w.HANDLE()
         c.set_last_error(0)
@@ -578,17 +594,31 @@ class _Native:
                 values.append((typ, flags, mask, self.sid(ptr.value + 8)))
             return tuple(values)
         try:
-            self.checked(self.a.ConvertSecurityDescriptorToStringSecurityDescriptorW(
-                sd, 1, SECURITY_INFORMATION, c.byref(text), None), "Canonical SDDL")
             control = w.WORD(); revision = w.DWORD()
             self.checked(self.a.GetSecurityDescriptorControl(sd, c.byref(control),
                                                            c.byref(revision)), "SD control")
+            _require(bool(control.value & 0x8000), "Native descriptor is not self-relative.")
+            size = self.a.GetSecurityDescriptorLength(sd)
+            _require(0 < size <= 1024 * 1024, "Native descriptor size is invalid.")
+            raw = c.string_at(sd, size)
+            cached = self._security_cache.get(raw)
+            if cached is not None:
+                return cached
+            self.checked(self.a.ConvertSecurityDescriptorToStringSecurityDescriptorW(
+                sd, 1, SECURITY_INFORMATION, c.byref(text), None), "Canonical SDDL")
             aces = entries(dacl)
             label_aces = entries(sacl) if sacl else ()
             _require(all(x[0] == 0x11 for x in label_aces), "Unexpected label information.")
-            return _Security(self.sid(owner), text.value, aces,
-                             tuple((x[1], x[2], x[3]) for x in label_aces),
-                             bool(control.value & 0x1000), self.sid(group), control.value)
+            result = _Security(self.sid(owner), text.value, aces,
+                               tuple((x[1], x[2], x[3]) for x in label_aces),
+                               bool(control.value & 0x1000), self.sid(group), control.value)
+            # Always query this handle's current descriptor. Reuse decoding,
+            # never the query or object/path/security-policy validation.
+            if size <= 65536:
+                if len(self._security_cache) == 32:
+                    self._security_cache.pop(next(iter(self._security_cache)))
+                self._security_cache[raw] = result
+            return result
         finally:
             if text:
                 self.k.LocalFree(c.cast(text, c.c_void_p))
@@ -728,6 +758,8 @@ class WindowsScienceCustodyBackend:
         self.policy = policy
         self.role = role
         self.policy_sha256 = policy.policy_sha256
+        self._admitted_policy_sha256 = self.policy_sha256
+        self._policy_value = _proof_value(policy)
         self.source_root_identity = policy.source_root_identity
         self.max_artifact_bytes = policy.max_artifact_bytes
         self.max_request_bytes = policy.max_request_bytes
@@ -744,6 +776,7 @@ class WindowsScienceCustodyBackend:
         self._lease = None
         self._root_evidence = {}
         self._admission = None
+        self._actor_proof_cache = ActorProofCache()
         self._qualification_pin_timing = None
         try:
             self._actor()
@@ -799,7 +832,8 @@ class WindowsScienceCustodyBackend:
                  "Actual effective TokenUser/TokenOwner does not match native role.")
         if self.policy.actor_profile is not None:
             admission = observe_actor(self._native, self.role, self.policy.actor_profile, observed,
-                                      check_images=self._admission is None)
+                                      check_images=self._admission is None,
+                                      proof_cache=self._actor_proof_cache)
             if self._admission is None:
                 self._admission = admission
             else:
@@ -868,11 +902,12 @@ class WindowsScienceCustodyBackend:
         token_id = observed.get("token_id")
         modified_id = observed.get("modified_id")
         key = _path_key(path)
-        if (self.role != "science" or key not in self._fixed_keys
+        if (key not in self._fixed_keys
                 or type(token_id) is not tuple or len(token_id) != 2
                 or type(modified_id) is not tuple or len(modified_id) != 2):
             return access_decisions(self._native, sec.sddl, MUTATION_RIGHTS)
-        identity = (token_id, modified_id, sec.sddl)
+        identity = (token_id, observed.get("authentication_id"), modified_id,
+                    observed.get("thread_token"), observed.get("token_type"), sec)
         cached = self._fixed_access_cache.get(key)
         if cached is not None and cached[0] == identity:
             return cached[1]
@@ -925,7 +960,8 @@ class WindowsScienceCustodyBackend:
         try:
             _require(not self._closed and not self._invalidated,
                      "Native custody backend is closed or invalidated.")
-            _require(self.policy_sha256 == self.policy.policy_sha256, "Immutable policy drift.")
+            _require(self.policy_sha256 == self._admitted_policy_sha256
+                     and self._policy_value == _proof_value(self.policy), "Immutable policy drift.")
             actor_started = time.perf_counter_ns() if timing is not None else 0
             try:
                 if quick_actor:
