@@ -18,7 +18,7 @@ from unittest.mock import patch
 import uuid
 
 from momentum_hunter.science_custody_commit import (
-    CustodyCommitError, CustodyCommitPending, CustodyObjectEvidence,
+    CustodyCommitError, CustodyCommitIntegrityError, CustodyCommitPending, CustodyObjectEvidence,
     ScienceCustodyFinalizer,
 )
 from momentum_hunter.science_custody_mailbox import (
@@ -329,6 +329,31 @@ class SealedRecorderIntegrationTests(unittest.TestCase):
             'SCIENCE_CUSTODY_READ_CONFIRM_ENTER', 'SCIENCE_CUSTODY_READ_CONFIRM_EXIT',
             'SCIENCE_CUSTODY_ACK_ENTER', 'SCIENCE_CUSTODY_ACK_EXIT',
         ])
+
+    def test_acknowledgement_has_one_fresh_authoritative_reconciliation(self):
+        storage = self.storage_set()
+        raw = b'{"profile":"SCIENCE_CONTINUOUS_RECEIPT_LEDGER_V1","sequence":4}\n'
+        relative = 'ledger/' + '00000000000000000004-' + hashlib.sha256(raw).hexdigest() + '.event.json'
+        storage.publish('arrivals', relative, raw)
+        with patch.object(storage.client._reader, 'lookup',
+                          wraps=storage.client._reader.lookup) as reconcile:
+            storage.publication_verified('arrivals', relative, raw)
+        self.assertEqual(1, reconcile.call_count)
+        self.assertFalse(list(self.backend.roots['requests'].iterdir()))
+
+    def test_fresh_acknowledgement_rejects_changed_receipt_without_retiring_transport(self):
+        storage = self.storage_set()
+        raw = b'{"profile":"SCIENCE_CONTINUOUS_RECEIPT_LEDGER_V1","sequence":5}\n'
+        relative = 'ledger/' + '00000000000000000005-' + hashlib.sha256(raw).hexdigest() + '.event.json'
+        storage.publish('arrivals', relative, raw)
+        with patch.object(storage.client._reader, 'lookup',
+                          side_effect=CustodyCommitIntegrityError('changed receipt')):
+            with self.assertRaisesRegex(CustodyCommitIntegrityError, 'changed receipt'):
+                storage.publication_verified('arrivals', relative, raw)
+        self.assertTrue(list(self.backend.roots['requests'].iterdir()))
+        self.assertTrue(list(self.backend.roots['staging'].iterdir()))
+        storage.publication_verified('arrivals', relative, raw)
+        self.assertFalse(list(self.backend.roots['requests'].iterdir()))
 
     def opened(self, storage_set=None):
         instance = ContinuousScienceRecorder(self.publication, self.backend.science,

@@ -13,7 +13,7 @@ import threading
 import time
 
 from .science_custody_commit import CustodyCommitError, CustodyCommitPending
-from .science_custody_mailbox import ScienceCustodyMailboxClient
+from .science_custody_mailbox import CustodyPendingRequest, ScienceCustodyMailboxClient
 from .windows_writer_storage import WriterPhysicalStorageError
 
 
@@ -121,10 +121,20 @@ The caller owns this object's lifetime independently of recorder views.
     def _await(self, pending):
         with self._stage('SCIENCE_CUSTODY_AWAIT'):
             deadline = time.monotonic() + self.timeout_seconds
+            next_probe = time.monotonic() + 1.0
+            hint = getattr(getattr(self, 'backend', None), 'completion_hint', None)
+            if type(pending) is not CustodyPendingRequest or not callable(hint):
+                hint = None
+            else:
+                identity_sha256 = pending.request.identity.digest()
             while True:
-                result = self.client.reconcile(pending)
-                if result is not None:
-                    return result
+                now = time.monotonic()
+                if (hint is None or now >= next_probe or now >= deadline
+                        or hint(identity_sha256) is not False):
+                    result = self.client.reconcile(pending)
+                    if result is not None:
+                        return result
+                    next_probe = time.monotonic() + 1.0
                 remaining = deadline - time.monotonic()
                 if remaining <= 0:
                     raise CustodyCommitPending('Commit outcome pending; staging and request preserved.')
@@ -166,12 +176,9 @@ The caller owns this object's lifetime independently of recorder views.
                         or request.content_sha256 != hashlib.sha256(raw).hexdigest()
                         or request.byte_length != len(raw)):
                     raise CustodyCommitError('Local publication acknowledgement differs from pending identity.')
-                # Reconcile performs a fresh trusted receipt/final readback. The
-                # caller's notification success cannot replace that authority.
-                result = self.client.reconcile(self._pending)
-                if result is None or result.receipt != self._result.receipt:
-                    raise CustodyCommitError('Receipt changed before local acknowledgement.')
-                self.client.acknowledge(self._pending, result)
+                # Acknowledge performs the fresh exact reconciliation after
+                # notification drain, before it can retire transport.
+                self.client.acknowledge(self._pending, self._result)
                 self._pending = self._result = None
 
     def read_committed(self, alias, relative):

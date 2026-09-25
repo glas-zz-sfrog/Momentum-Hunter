@@ -427,6 +427,24 @@ class NativeBackendFlowTests(unittest.TestCase):
             backend.create_trusted("custody", "sessions/file.json", b"x")
         self.assertFalse(any(obj.path.name == "absent" for obj in native.objects.values()))
 
+    def test_completion_hint_is_non_authoritative_and_bounded_to_receipts(self):
+        backend, _ = self.make_backend("science")
+        digest = "a" * 64
+        expected = mod._io_path(backend.namespace_root("receipts") /
+                                 f"aa/{digest}.complete.json")
+        with patch.object(mod.os, "stat", side_effect=FileNotFoundError) as stat:
+            self.assertIs(backend.completion_hint(digest), False)
+            stat.assert_called_once_with(expected, follow_symlinks=False)
+        with patch.object(mod.os, "stat", return_value=object()):
+            self.assertIs(backend.completion_hint(digest), True)
+        with patch.object(mod.os, "stat", side_effect=PermissionError):
+            self.assertIsNone(backend.completion_hint(digest))
+        with self.assertRaises(mod.ScienceCustodyNativeError):
+            backend.completion_hint("not-a-digest")
+        writer, _ = self.make_backend("writer")
+        with self.assertRaises(mod.ScienceCustodyNativeError):
+            writer.completion_hint(digest)
+
     def test_actor_wrong_owner_impersonated_writer_and_disabled_privilege_fail(self):
         backend, native = self.make_backend()
         original = native.token()

@@ -29,7 +29,7 @@ from momentum_hunter import windows_writer_storage as storage
 from momentum_hunter import science_mutable_policy as mutable
 from momentum_hunter.science_custody_commit import (
     CustodyCommitConflict, CustodyCommitIntegrityError, CustodyObjectEvidence,
-    MAX_REQUEST_BYTES as PROTOCOL_METADATA_BYTES, validate_relative_path,
+    MAX_REQUEST_BYTES as PROTOCOL_METADATA_BYTES, completion_path, validate_relative_path,
 )
 
 PROFILE = "science-nonowner-native-custody-v1"
@@ -778,6 +778,19 @@ class WindowsScienceCustodyBackend:
 
     def namespace_root(self, alias: str) -> Path:
         return Path(self.policy.root(alias).path)
+
+    def completion_hint(self, identity_sha256: str) -> bool | None:
+        """Untrusted wakeup hint; only native reconciliation can admit completion."""
+        _require(self.role == "science", "Only the Science reader waits for completion.")
+        _hash(identity_sha256)
+        path = self.namespace_root("receipts") / completion_path(identity_sha256)
+        try:
+            os.stat(_io_path(path), follow_symlinks=False)
+        except FileNotFoundError:
+            return False
+        except OSError:
+            return None
+        return True
 
     def _actor(self) -> None:
         observed = self._native.token()
