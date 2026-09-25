@@ -914,7 +914,8 @@ class WriterResourceGuard:
         for binding in self.profile.resources:
             if (binding.directory and binding.name not in self._image_roots
                     and binding.name not in DYNAMIC_RESOURCE_ROOTS):
-                handle = next(h for h, *_ in self.handles if h.path == Path(binding.path))
+                bound_path = Path(binding.path)
+                handle = next(h for h, *_ in self.handles if h.path == bound_path)
                 self._future_children(binding.name, self.native.security(handle))
                 self._scan_support(binding)
 

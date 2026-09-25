@@ -70,6 +70,44 @@ class StableAdmissionTests(unittest.TestCase):
                         guard.recheck()
                     check.assert_called_once()
 
+    def test_support_lookup_constructs_one_bound_path_without_skipping_checks(self):
+        guard = self.guard('provider_replica')
+        expected_handle = guard.handles[0][0]
+        image_handles = [(SimpleNamespace(path=Path('F:/disposable-016e/image') / f'{i}.py'),
+                          'image', (1, 0, i + 2), False, True) for i in range(500)]
+        guard.handles[:0] = image_handles
+        with patch.object(profile, 'Path', wraps=Path) as paths, \
+             patch.object(guard, '_future_children') as inherited, \
+             patch.object(guard, '_scan_support') as descendants:
+            guard.recheck()
+        self.assertEqual(1, paths.call_count)
+        guard.native.require_path.assert_called_once_with(expected_handle, expected_handle.path)
+        guard.native.information.assert_called_once_with(expected_handle)
+        guard.native.identity.assert_called_once_with(expected_handle)
+        self.assertEqual([unittest.mock.call(expected_handle)] * 2, guard.native.security.call_args_list)
+        inherited.assert_called_once_with('provider_replica', guard.native.security.return_value)
+        descendants.assert_called_once_with(guard.profile.resources[0])
+
+    def test_support_lookup_still_rejects_descriptor_drift_before_descendant_scan(self):
+        guard = self.guard('provider_replica')
+        guard.native.security.return_value = SimpleNamespace(digest='changed', sddl='changed')
+        with patch.object(guard, '_future_children') as inherited, \
+             patch.object(guard, '_scan_support') as descendants:
+            with self.assertRaisesRegex(profile.WriterProfileError, 'identity/security drift'):
+                guard.recheck()
+        inherited.assert_not_called()
+        descendants.assert_not_called()
+
+    def test_support_lookup_missing_bound_handle_cannot_select_other_object(self):
+        guard = self.guard('provider_replica')
+        guard.handles[0][0].path = Path('F:/disposable-016e/wrong-object')
+        with patch.object(guard, '_future_children') as inherited, \
+             patch.object(guard, '_scan_support') as descendants:
+            with self.assertRaises(StopIteration):
+                guard.recheck()
+        inherited.assert_not_called()
+        descendants.assert_not_called()
+
 
 class HandoffAcquisitionTests(unittest.TestCase):
     def setup_input(self, raw=b'candidate', name='a' * 32 + '.stage'):
