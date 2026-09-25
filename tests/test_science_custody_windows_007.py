@@ -10,6 +10,7 @@ import hashlib
 import json
 import ctypes
 from ctypes import wintypes
+import os
 from dataclasses import replace
 from pathlib import Path, PureWindowsPath
 from types import SimpleNamespace
@@ -195,6 +196,13 @@ class NativeDouble:
 
 
 class NativePolicyTests(unittest.TestCase):
+    @unittest.skipUnless(os.name == "nt", "Native token statistics require Windows")
+    def test_fast_token_fingerprint_matches_full_native_observation(self):
+        native = mod._Native()
+        full = native.token()
+        quick = native.token_fingerprint()
+        self.assertEqual({key: full[key] for key in quick}, quick)
+
     def test_disabled_factory_does_no_native_io(self):
         with patch.object(mod, "_Native", side_effect=AssertionError("native I/O")):
             self.assertIsNone(mod.open_science_custody_backend(None, role="science"))
@@ -503,6 +511,74 @@ class NativeBackendFlowTests(unittest.TestCase):
                 backend.read_trusted("custody", "x.json", maximum=20)
         self.assertEqual(0, backend._transaction_depth)
 
+    def test_nested_reads_recheck_path_scope_and_revalidate_full_topology_on_return(self):
+        backend, native = self.make_backend("science")
+        native.add(backend.namespace_root("custody") / "x.json", raw=b"raw")
+        backend.enable_qualification_pin_timing()
+        fixed = len(backend._fixed_keys)
+        scoped = len(backend._read_scopes["custody"])
+        self.assertLess(scoped, fixed)
+        with backend.transaction():
+            for _ in range(40):
+                self.assertEqual(b"raw", backend.read_trusted("custody", "x.json", maximum=20).raw)
+        profile = backend.qualification_pin_timing()
+        self.assertEqual(2, profile["full_checks"])
+        self.assertEqual(40, profile["scoped_read_checks"])
+        self.assertEqual(2 * fixed + 40 * scoped, profile["fixed_root_validations"])
+
+    def test_nested_read_rejects_relevant_root_drift_before_bytes(self):
+        backend, native = self.make_backend("science")
+        root = native.objects[mod._path_key(backend.namespace_root("custody"))]
+        target = native.add(backend.namespace_root("custody") / "x.json", raw=b"raw")
+        with self.assertRaises(mod.ScienceCustodyNativeError):
+            with backend.transaction():
+                root.identity = (9, 9, 9)
+                backend.read_trusted("custody", "x.json", maximum=20)
+        self.assertEqual(b"raw", target.raw)
+        self.assertFalse(any(p.name == "x.json" for p, _ in native.opens))
+
+    def test_cross_root_drift_after_nested_read_blocks_effect_and_return(self):
+        backend, native = self.make_backend("science")
+        native.add(backend.namespace_root("custody") / "x.json", raw=b"raw")
+        unrelated = native.objects[mod._path_key(backend.namespace_root("arrivals"))]
+        with self.assertRaises(mod.ScienceCustodyNativeError):
+            with backend.transaction():
+                backend.read_trusted("custody", "x.json", maximum=20)
+                unrelated.identity = (9, 9, 9)
+                backend.create_transport("requests", "request.json", b"raw")
+        self.assertNotIn(mod._path_key(backend.namespace_root("requests") / "request.json"),
+                         native.objects)
+
+    def test_cross_root_drift_after_nested_read_blocks_authoritative_return(self):
+        backend, native = self.make_backend("science")
+        native.add(backend.namespace_root("custody") / "x.json", raw=b"raw")
+        unrelated = native.objects[mod._path_key(backend.namespace_root("arrivals"))]
+        with self.assertRaises(mod.ScienceCustodyNativeError):
+            with backend.transaction():
+                self.assertEqual(b"raw", backend.read_trusted("custody", "x.json", maximum=20).raw)
+                unrelated.identity = (9, 9, 9)
+
+    def test_unchanged_native_token_fingerprint_reuses_full_admission_only_within_read(self):
+        backend, native = self.make_backend("science")
+        native.add(backend.namespace_root("custody") / "x.json", raw=b"raw")
+        original = native.token
+        stable = {"token_id": (1, 2), "authentication_id": (3, 4),
+                  "modified_id": (5, 6), "token_type": 1}
+        native.token = lambda: {**stable, **original()}
+        native.token_fingerprint = lambda: {"thread_token": False, **stable}
+        with patch.object(backend, "_actor", wraps=backend._actor) as full:
+            with backend.transaction():
+                for _ in range(5):
+                    backend.read_trusted("custody", "x.json", maximum=20)
+            self.assertEqual(2, full.call_count)
+        native.token_fingerprint = lambda: {"thread_token": False, **stable,
+                                            "modified_id": (5, 7)}
+        with self.assertRaises(mod.ScienceCustodyNativeError):
+            with backend.transaction():
+                native.token_override = {**original(), **stable,
+                                         "modified_id": (5, 7), "owner": WRITER}
+                backend.read_trusted("custody", "x.json", maximum=20)
+
     def test_nested_writer_publication_rejects_drift_before_rename(self):
         backend, native = self.make_backend("writer")
         root = native.objects[mod._path_key(backend.namespace_root("custody"))]
@@ -524,6 +600,39 @@ class NativeBackendFlowTests(unittest.TestCase):
                 backend.delete_transport("staging", name,
                                          expected_identity=staged.identity,
                                          expected_sha256=sha256(staged.raw))
+        self.assertEqual([], native.deletes)
+
+    def test_drift_during_private_readback_blocks_rename(self):
+        backend, native = self.make_backend("science")
+        root = native.objects[mod._path_key(backend.namespace_root("custody"))]
+        original_read = native.read
+        def drift(handle, maximum):
+            raw = original_read(handle, maximum)
+            if handle.obj.path.name == ".custody-transport.tmp":
+                root.identity = (9, 9, 9)
+            return raw
+        native.read = drift
+        with self.assertRaises(mod.ScienceCustodyNativeError):
+            backend.create_transport("requests", "request.json", b"raw")
+        self.assertEqual([], native.renames)
+
+    def test_drift_during_cleanup_snapshot_blocks_delete(self):
+        backend, native = self.make_backend("science")
+        name = "a" * 32 + ".stage"
+        staged = native.add(backend.namespace_root("staging") / name,
+                            kind="transport", raw=b"raw")
+        root = native.objects[mod._path_key(backend.namespace_root("custody"))]
+        original_read = native.read
+        def drift(handle, maximum):
+            raw = original_read(handle, maximum)
+            if handle.obj is staged:
+                root.identity = (9, 9, 9)
+            return raw
+        native.read = drift
+        with self.assertRaises(mod.ScienceCustodyNativeError):
+            backend.delete_transport("staging", name,
+                                     expected_identity=staged.identity,
+                                     expected_sha256=sha256(staged.raw))
         self.assertEqual([], native.deletes)
 
     def test_copy_never_reuses_source_object_and_closes_all_file_handles(self):
@@ -589,7 +698,8 @@ class NativeBackendFlowTests(unittest.TestCase):
             counts.append(native.security_calls - before)
             self.assertEqual(fixed, len(backend._pins))
         self.assertEqual(min(counts), max(counts))
-        self.assertLess(max(counts), fixed + 20)
+        # Entry, directory creation, and rename each retain a full pre-effect gate.
+        self.assertLess(max(counts), 4 * fixed + 20)
 
     def test_finite_pin_bound_fails_closed(self):
         p = policy()

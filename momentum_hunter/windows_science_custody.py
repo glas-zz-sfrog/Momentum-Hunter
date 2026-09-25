@@ -515,6 +515,42 @@ class _Native:
         finally:
             self.checked(self.k.CloseHandle(token), "Close token handle")
 
+    def token_fingerprint(self) -> dict[str, object]:
+        """Recheck the effective token without rebuilding its admitted SID inventory."""
+        w = self.w
+        class LUID(c.Structure):
+            _fields_ = [("low", w.DWORD), ("high", w.LONG)]
+        class STATISTICS(c.Structure):
+            _fields_ = [("token", LUID), ("authentication", LUID),
+                        ("expiration", c.c_longlong), ("type", w.DWORD),
+                        ("level", w.DWORD), ("charged", w.DWORD),
+                        ("available", w.DWORD), ("groups", w.DWORD),
+                        ("privileges", w.DWORD), ("modified", LUID)]
+        token = w.HANDLE()
+        c.set_last_error(0)
+        thread = bool(self.a.OpenThreadToken(self.k.GetCurrentThread(), 8, True, c.byref(token)))
+        if not thread:
+            error = c.get_last_error()
+            if error != 1008:
+                raise storage._windows_error("OpenThreadToken", error)
+            self.checked(self.a.OpenProcessToken(self.k.GetCurrentProcess(), 8, c.byref(token)),
+                         "OpenProcessToken")
+        try:
+            length = w.DWORD()
+            self.a.GetTokenInformation(token, 10, None, 0, c.byref(length))
+            _require(length.value == c.sizeof(STATISTICS), "Native token statistics size changed.")
+            value = STATISTICS()
+            self.checked(self.a.GetTokenInformation(token, 10, c.byref(value),
+                                                    c.sizeof(value), c.byref(length)),
+                         "GetTokenInformation(statistics)")
+            _require(length.value == c.sizeof(STATISTICS), "Native token statistics size changed.")
+            luid = lambda item: (item.low, item.high & 0xFFFFFFFF)
+            return {"thread_token": thread, "token_id": luid(value.token),
+                    "authentication_id": luid(value.authentication),
+                    "modified_id": luid(value.modified), "token_type": value.type}
+        finally:
+            self.checked(self.k.CloseHandle(token), "Close token handle")
+
     def security(self, handle) -> _Security:
         w = self.w
         owner = c.c_void_p(); group = c.c_void_p(); dacl = c.c_void_p()
@@ -700,8 +736,10 @@ class WindowsScienceCustodyBackend:
         self._closed = False
         self._pins = {}
         self._fixed_keys = frozenset()
+        self._read_scopes = {}
         self._fixed_access_cache = {}
         self._transaction_depth = 0
+        self._scoped_reads = False
         self._lease = None
         self._root_evidence = {}
         self._admission = None
@@ -715,6 +753,12 @@ class WindowsScienceCustodyBackend:
                     continue
                 self._pin_binding(item, ancestor=False)
             self._fixed_keys = frozenset(self._pins)
+            for item in policy.roots:
+                path = PureWindowsPath(item.path)
+                keys = {_path_key(part) for part in (path, *path.parents)}
+                if _path_key(path) in self._fixed_keys:
+                    self._read_scopes[item.namespace] = tuple(
+                        key for key in self._fixed_keys if key in keys)
             self._acquire_lease()
             if role == "writer":
                 self._directory("arrivals", ("ledger",), create=True)
@@ -757,6 +801,17 @@ class WindowsScienceCustodyBackend:
                      and observed["integrity"] == self.policy.science_integrity_sid,
                      "Actual Science token groups/privileges/integrity differ from policy.")
         self.last_token_observation = observed
+
+    def _actor_unchanged(self) -> None:
+        fingerprint = getattr(self._native, "token_fingerprint", None)
+        if fingerprint is None:
+            self._actor()
+            return
+        observed = fingerprint()
+        admitted = self.last_token_observation
+        if any(observed.get(key) != admitted.get(key) for key in (
+                "thread_token", "token_id", "authentication_id", "modified_id", "token_type")):
+            self._actor()
 
     def _kind(self, namespace: str) -> str:
         if self.policy.version == mutable.VERSION and namespace in mutable.KINDS:
@@ -841,15 +896,15 @@ class WindowsScienceCustodyBackend:
             handle.close()
             raise
 
-    def _check_pins(self) -> None:
+    def _check_pins(self, *, keys=None, quick_actor=False) -> None:
         try:
-            self._check_pins_current()
+            self._check_pins_current(keys=keys, quick_actor=quick_actor)
         except BaseException:
             if self.policy.version == mutable.VERSION:
                 self.close()
             raise
 
-    def _check_pins_current(self) -> None:
+    def _check_pins_current(self, *, keys=None, quick_actor=False) -> None:
         timing = self._qualification_pin_timing
         started = time.perf_counter_ns() if timing is not None else 0
         try:
@@ -857,13 +912,16 @@ class WindowsScienceCustodyBackend:
             _require(self.policy_sha256 == self.policy.policy_sha256, "Immutable policy drift.")
             actor_started = time.perf_counter_ns() if timing is not None else 0
             try:
-                self._actor()
+                if quick_actor:
+                    self._actor_unchanged()
+                else:
+                    self._actor()
             finally:
                 if timing is not None:
                     timing["actor_ns"] += time.perf_counter_ns() - actor_started
             # Fixed topology is finite policy state. Revalidating all historical
             # subdirectories here would turn ordinary ingest into a history scan.
-            for key in self._fixed_keys:
+            for key in self._fixed_keys if keys is None else keys:
                 root_started = time.perf_counter_ns() if timing is not None else 0
                 try:
                     handle, kind, digest, identity = self._pins[key]
@@ -878,11 +936,13 @@ class WindowsScienceCustodyBackend:
             if timing is not None:
                 timing["pin_check_ns"] += time.perf_counter_ns() - started
                 timing["pin_checks"] += 1
+                timing["scoped_read_checks" if keys is not None else "full_checks"] += 1
 
     def enable_qualification_pin_timing(self) -> None:
         self._qualification_pin_timing = {
             "pin_checks": 0, "pin_check_ns": 0, "actor_ns": 0,
             "fixed_root_validations": 0, "fixed_root_ns": 0,
+            "full_checks": 0, "scoped_read_checks": 0,
         }
 
     def reset_qualification_pin_timing(self) -> None:
@@ -918,6 +978,7 @@ class WindowsScienceCustodyBackend:
                     return None
                 _require(self.role == "writer" and namespace in TRUSTED,
                          "Science cannot create committed directories.")
+                self._check_pins()
                 self._native.mkdir(path, creation_sddl(self.policy, "trusted", directory=True))
                 handle = self._native.open(path, directory=True, access=0x1200A0, share=3)
             try:
@@ -997,12 +1058,37 @@ class WindowsScienceCustodyBackend:
     def transaction(self) -> Iterator[None]:
         with self._lock:
             self._check_pins()
+            if self._transaction_depth == 0:
+                self._scoped_reads = False
             self._transaction_depth += 1
             try:
                 yield
+                if self._transaction_depth == 1 and self._scoped_reads and not self._closed:
+                    self._check_pins()
             finally:
                 self._transaction_depth -= 1
                 if self._transaction_depth == 0:
+                    self._scoped_reads = False
+                    self._release_dynamic_pins()
+
+    @contextmanager
+    def _read_scope(self, namespace: str) -> Iterator[None]:
+        _require(namespace in self._read_scopes, "Read namespace is not admitted.")
+        with self._lock:
+            if self._transaction_depth:
+                self._check_pins(keys=self._read_scopes[namespace], quick_actor=True)
+                self._scoped_reads = True
+            else:
+                self._check_pins()
+            self._transaction_depth += 1
+            try:
+                yield
+                if self._transaction_depth == 1 and not self._closed:
+                    self._check_pins()
+            finally:
+                self._transaction_depth -= 1
+                if self._transaction_depth == 0:
+                    self._scoped_reads = False
                     self._release_dynamic_pins()
 
     def _release_dynamic_pins(self) -> None:
@@ -1030,7 +1116,7 @@ class WindowsScienceCustodyBackend:
     def validate_directory(self, alias: str, relative: str = "") -> bool:
         _require(alias in TRUSTED, "Only trusted directories are exposed for read-only inspection.")
         parts = _relative(relative, empty=True)
-        with self.transaction():
+        with self._read_scope(alias):
             return self._directory(alias, parts) is not None
 
     def _snapshot(self, handle, path: Path, kind: str, maximum: int) -> CustodyObjectEvidence:
@@ -1106,18 +1192,18 @@ class WindowsScienceCustodyBackend:
 
     def read_staged(self, name: str, *, maximum: int) -> CustodyObjectEvidence:
         _require(_STAGE.fullmatch(name) is not None, "Staging name must bind one generation.")
-        with self.transaction():
+        with self._read_scope("staging"):
             return self._read("staging", name, maximum, missing=False)
 
     def read_request(self, name: str, *, maximum: int) -> CustodyObjectEvidence:
         _require(name == "request.json", "Only the fixed request slot is admitted.")
-        with self.transaction():
+        with self._read_scope("requests"):
             return self._read("requests", name, maximum, missing=False)
 
     def read_trusted(self, namespace: str, relative: str, *,
                      maximum: int) -> CustodyObjectEvidence | None:
         _require(namespace in TRUSTED, "Unknown trusted namespace.")
-        with self.transaction():
+        with self._read_scope(namespace):
             return self._read(namespace, relative, maximum, missing=True)
 
     def _publish_copy(self, namespace: str, relative: str, raw: bytes, *, transport: bool,
@@ -1167,6 +1253,7 @@ class WindowsScienceCustodyBackend:
             # Never link or move an untrusted staging object. Only this freshly
             # created current-role object can reach the native rename operation.
             try:
+                self._check_pins()
                 self._native.rename(handle, target)
             except OSError as exc:
                 if exc.winerror not in {80, 183}:
@@ -1261,7 +1348,7 @@ class WindowsScienceCustodyBackend:
     def bounded_names(self, namespace: str, limit: int) -> tuple[str, ...]:
         _require(namespace in TRANSPORT, "Only mutable transport is bounded-enumerated.")
         _bound(limit, self.policy.max_mailbox_entries + 1)
-        with self.transaction():
+        with self._read_scope(namespace):
             values = []
             with os.scandir(self.namespace_root(namespace)) as entries:
                 for entry in entries:
@@ -1313,6 +1400,7 @@ class WindowsScienceCustodyBackend:
                         "Transport generation/object changed; preserve it and block acknowledgment.")
                 # FileDispositionInfo deletes this exact opened object. No
                 # path-based unlink/reopen exists after generation/hash checks.
+                self._check_pins()
                 self._native.delete(handle)
                 return True
             finally:
@@ -1323,7 +1411,7 @@ class WindowsScienceCustodyBackend:
         _require(alias in TRUSTED and type(suffix) is str and len(suffix) <= 128
                  and "/" not in suffix and "\\" not in suffix, "Invalid history audit request.")
         parts = _relative(relative, empty=True)
-        with self.transaction():
+        with self._read_scope(alias):
             initial = self._directory(alias, parts)
             if initial is None:
                 return ()
