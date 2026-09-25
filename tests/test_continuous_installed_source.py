@@ -190,10 +190,11 @@ def deny(event, args):
 sys.addaudithook(deny)
 from momentum_hunter import continuous_production as product
 from momentum_hunter import continuous_host_contract as contract
+from momentum_hunter import continuous_live_qualification as live
 assert Path(contract.__file__).resolve().is_relative_to(Path.cwd())
 out = io.StringIO()
 try:
-    with patch.object(product, "LiveDiscoverySource") as discovery, patch.object(product, "LiveMarketDataSource") as market:
+    with patch.object(live, "LiveDiscoverySource") as discovery, patch.object(live, "LiveMarketDataSource") as market:
         with contextlib.redirect_stdout(out):
             result = product.main(["--config", sys.argv[1], "--print-install-plan"])
         discovery.assert_not_called()
