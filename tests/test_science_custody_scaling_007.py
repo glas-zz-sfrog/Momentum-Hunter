@@ -39,16 +39,16 @@ from tests.test_strategy_science_recorder_eligibility_authority import export_en
 # Source-derived bounds, not throughput tolerances. A new final requires two
 # claim, four receipt/completion and two raw lookups. Its staged/final/receipted bytes are
 # each verified once. A receipt/checksum verification adds one dependency claim,
-# a four-read dependency lookup and one direct payload/manifest read: 6 extra
-# reads per verification, three verifications on a new commit (8 + 3*6 = 26).
-# A lookup verifies once (4 + 6 = 10). Dependencies are leaves: only the two edges
+# receipt, completion and exact final read: 4 extra reads per verification,
+# three verifications on a new commit (8 + 3*4 = 20).
+# A lookup verifies once (4 + 4 = 8). Dependencies are leaves: only the two edges
 # below are allowed, and no dependency may introduce another dependency.
 _DEPENDENCY_ROLE = {"SCIENTIFIC_RECEIPT": "PAYLOAD", "FINAL_CHECKSUM": "FINAL_MANIFEST"}
 _BASE_READ_BOUNDS = {"finalize": {"trusted_reads": 8, "claims_reads": 2, "receipts_reads": 4},
                      "lookup": {"trusted_reads": 4, "claims_reads": 1, "receipts_reads": 2}}
 _DEPENDENT_READ_BOUNDS = {
-    "finalize": {"trusted_reads": 26, "claims_reads": 8, "receipts_reads": 10, "custody_reads": 8},
-    "lookup": {"trusted_reads": 10, "claims_reads": 3, "receipts_reads": 4, "custody_reads": 3},
+    "finalize": {"trusted_reads": 20, "claims_reads": 5, "receipts_reads": 10, "custody_reads": 5},
+    "lookup": {"trusted_reads": 8, "claims_reads": 2, "receipts_reads": 4, "custody_reads": 2},
 }
 
 

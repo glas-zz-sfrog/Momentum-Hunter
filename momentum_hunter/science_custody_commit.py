@@ -488,7 +488,13 @@ class ScienceCustodyFinalizer:
         return None if result is None else _evidence(result, maximum=maximum)
 
     def _claim(self, request):
-        evidence = self._read("claims", claim_path(request.identity.digest()), MAX_REQUEST_BYTES)
+        claim_info = self._claim_for_identity(request.identity)
+        if claim_info is not None and claim_info[2].commit_binding() != request.commit_binding():
+            raise CustodyCommitConflict("Logical commit identity already claims other bytes or destination.")
+        return claim_info
+
+    def _claim_for_identity(self, identity):
+        evidence = self._read("claims", claim_path(identity.digest()), MAX_REQUEST_BYTES)
         if evidence is None:
             return None
         claim = _decode(evidence.raw)
@@ -499,8 +505,8 @@ class ScienceCustodyFinalizer:
         original = CustodyCommitRequest.from_bytes(canonical_protocol_bytes(claim["request"]))
         if original.request_digest() != claim["request_sha256"]:
             raise CustodyCommitIntegrityError("Durable claim request digest differs.")
-        if original.commit_binding() != request.commit_binding():
-            raise CustodyCommitConflict("Logical commit identity already claims other bytes or destination.")
+        if original.identity != identity:
+            raise CustodyCommitIntegrityError("Referenced artifact claim has another identity/root.")
         _file_identity(claim["staging_file_identity"])
         _text(claim["staging_owner_sid"])
         _hash(claim["staging_descriptor_sha256"])
@@ -519,51 +525,48 @@ class ScienceCustodyFinalizer:
         elif actual.artifact_role == "FINAL_CHECKSUM":
             self._verify_final_checksum(request, final.raw, recover=recover_dependencies)
 
-    def _dependency_request(self, identity):
-        claim = self._read("claims", claim_path(identity.digest()), MAX_REQUEST_BYTES)
-        if claim is None:
+    def _required_claim(self, identity):
+        claim_info = self._claim_for_identity(identity)
+        if claim_info is None:
             raise CustodyCommitIntegrityError("Referenced scientific artifact has no durable claim.")
-        value = _decode(claim.raw)
-        original = value.get("request")
-        if not isinstance(original, dict):
-            raise CustodyCommitIntegrityError("Referenced artifact claim has no exact request.")
-        request = CustodyCommitRequest.from_bytes(canonical_protocol_bytes(original))
-        if request.identity != identity:
-            raise CustodyCommitIntegrityError("Referenced artifact claim has another identity/root.")
-        return request
+        self._validate_request(claim_info[2])
+        return claim_info
 
-    def _confirmed_dependency(self, original, expected_path, *, recover):
+    def _confirmed_dependency(self, identity, expected_path, *, recover):
+        claim_info = self._required_claim(identity)
+        original = claim_info[2]
         if original.final_root != "custody" or original.final_relative_path != expected_path:
             raise CustodyCommitIntegrityError("Referenced artifact has another identity/root/path.")
-        if self.lookup(original) is None:
+        self._trace(original, "lookup_begin", completion_path(original.identity.digest()))
+        verified = self._existing(original, claim_info)
+        if verified is None:
             if not recover:
                 raise CustodyCommitPending("Referenced artifact durability is unconfirmed.")
             self.finalize(original)
+            verified = self._existing(original, self._claim(original))
+            if verified is None:
+                raise CustodyCommitPending("Referenced artifact durability is unconfirmed after recovery.")
+        # Return the exact bytes bound by this fresh receipt/completion proof.
+        return verified[1]
 
     def _verify_scientific_receipt(self, request, raw, *, recover=False):
         parts = request.final_relative_path.split("/")
         parts[3] = "payloads"
         parts[-1] = parts[-1].removesuffix(".receipt.json") + ".payload.json"
         payload_path = "/".join(parts)
-        payload = self._read("custody", payload_path, self.backend.max_artifact_bytes)
-        if payload is None:
-            raise CustodyCommitIntegrityError("Scientific receipt references a missing payload.")
-        identity = identity_for_artifact(source_root_identity=self.backend.source_root_identity,
-            final_root="custody", relative_path=payload_path, raw=payload.raw)
+        identity = CustodyCommitIdentity(self.backend.source_root_identity, "PAYLOAD",
+                                         request.identity.scope, request.identity.logical_key)
+        payload = self._confirmed_dependency(identity, payload_path, recover=recover)
         value, payload_value = _scientific_json(raw), _scientific_json(payload.raw)
         if (value.get("payload_sha256") != sha256(payload.raw)
                 or value.get("record_id") != payload_value.get("record_id")):
             raise CustodyCommitIntegrityError("Scientific receipt does not bind its exact payload/record.")
-        original = self._dependency_request(identity)
-        self._confirmed_dependency(original, payload_path, recover=recover)
 
     def _verify_final_checksum(self, request, raw, *, recover=False):
         identity = CustodyCommitIdentity(self.backend.source_root_identity, "FINAL_MANIFEST",
                                          request.identity.scope, "FINAL_MANIFEST")
-        original = self._dependency_request(identity)
         expected_manifest = request.final_relative_path.removesuffix(".sha256") + ".final.json"
-        self._confirmed_dependency(original, expected_manifest, recover=recover)
-        manifest = self._read("custody", expected_manifest, self.backend.max_artifact_bytes)
+        manifest = self._confirmed_dependency(identity, expected_manifest, recover=recover)
         value = _scientific_json(manifest.raw)
         inventory = value.get("artifact_inventory")
         if not isinstance(inventory, list):
@@ -662,16 +665,16 @@ class ScienceCustodyFinalizer:
             return None
         if completion.raw != self._completion_bytes(request, claim_info, final, evidence):
             raise CustodyCommitIntegrityError("Completion no longer binds its exact durable objects.")
-        return CustodyCommitResult(receipt, False, False)
+        return CustodyCommitResult(receipt, False, False), final
 
     def lookup(self, request: CustodyCommitRequest) -> CustodyCommitResult | None:
         request = self._validate_request(request)
         self._trace(request, "lookup_begin", completion_path(request.identity.digest()))
         with self.backend.transaction():
-            return self._existing(request, self._claim(request))
+            verified = self._existing(request, self._claim(request))
+            return None if verified is None else verified[0]
 
-    def inspect_existing(self, root: str, relative: str):
-        """Validate visible raw/claim for bounded reconfirmation, NOT success."""
+    def _inspect_existing(self, root: str, relative: str):
         if root not in _ROOTS:
             raise CustodyCommitError("Unknown final root alias.")
         relative = validate_relative_path(relative)
@@ -681,23 +684,30 @@ class ScienceCustodyFinalizer:
                 return None
             identity = identity_for_artifact(source_root_identity=self.backend.source_root_identity,
                 final_root=root, relative_path=relative, raw=final.raw)
-            original = self._validate_request(self._dependency_request(identity))
+            claim_info = self._required_claim(identity)
+            original = claim_info[2]
             if original.final_root != root or original.final_relative_path != relative:
                 raise CustodyCommitIntegrityError("Visible artifact differs from its claimed destination.")
-            self._claim(original)
             if len(final.raw) != original.byte_length or sha256(final.raw) != original.content_sha256:
                 raise CustodyCommitIntegrityError("Visible artifact differs from its claimed exact bytes.")
-            return original, final
+            return original, final, claim_info
+
+    def inspect_existing(self, root: str, relative: str):
+        """Validate visible raw/claim for bounded reconfirmation, NOT success."""
+        inspected = self._inspect_existing(root, relative)
+        return None if inspected is None else inspected[:2]
 
     def read_confirmed(self, root: str, relative: str) -> CustodyObjectEvidence | None:
         with self.backend.transaction():
-            inspected = self.inspect_existing(root, relative)
+            inspected = self._inspect_existing(root, relative)
             if inspected is None:
                 return None
-            original, final = inspected
-            result = self.lookup(original)
-            if result is None:
+            original, final, claim_info = inspected
+            self._trace(original, "lookup_begin", completion_path(original.identity.digest()))
+            verified = self._existing(original, claim_info)
+            if verified is None:
                 raise CustodyCommitPending("Visible artifact durability is unconfirmed.")
+            result, _ = verified
             if (result.receipt.final_file_identity != final.file_identity
                     or result.receipt.final_descriptor_sha256 != final.descriptor_sha256
                     or result.receipt.final_owner_sid != final.owner_sid
@@ -711,7 +721,7 @@ class ScienceCustodyFinalizer:
             claim_info = self._claim(request)
             existing = self._existing(request, claim_info, recover_dependencies=True)
             if existing is not None:
-                return existing
+                return existing[0]
             final = self._read(request.final_root, request.final_relative_path, self.backend.max_artifact_bytes)
             if final is not None and claim_info is None:
                 raise CustodyCommitIntegrityError("Unclaimed final cannot be adopted.")
@@ -777,4 +787,4 @@ class ScienceCustodyFinalizer:
             verified = self._existing(request, claim_info)
             if verified is None:
                 raise CustodyCommitIntegrityError("Durable receipt is not readable.")
-            return CustodyCommitResult(verified.receipt, bool(created), recovered)
+            return CustodyCommitResult(verified[0].receipt, bool(created), recovered)
