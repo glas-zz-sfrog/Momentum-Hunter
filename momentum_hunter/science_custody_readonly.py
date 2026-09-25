@@ -129,8 +129,13 @@ The caller owns this object's lifetime independently of recorder views.
                 identity_sha256 = pending.request.identity.digest()
             while True:
                 now = time.monotonic()
-                if (hint is None or now >= next_probe or now >= deadline
-                        or hint(identity_sha256) is not False):
+                if hint is None or now >= next_probe or now >= deadline:
+                    reconcile = True
+                else:
+                    reconcile = hint(identity_sha256) is not False
+                    now = time.monotonic()
+                    reconcile = reconcile or now >= next_probe or now >= deadline
+                if reconcile:
                     result = self.client.reconcile(pending)
                     if result is not None:
                         return result

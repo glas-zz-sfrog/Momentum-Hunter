@@ -120,6 +120,25 @@ class ScienceCustodyStartupPollTests(unittest.TestCase):
         self.assertGreaterEqual(calls[0], 1.0)
         self.assertLess(calls[0], 1.2)
 
+    def test_slow_negative_hint_cannot_skip_periodic_or_final_reconciliation(self):
+        for timeout, hint_end in ((3.0, 1.05), (0.02, 0.03)):
+            with self.subTest(timeout=timeout):
+                now = [0.0]
+                calls = []
+                result = object()
+
+                def slow_hint(_identity):
+                    now[0] = hint_end
+                    return False
+
+                storage = SimpleNamespace(backend=SimpleNamespace(completion_hint=slow_hint),
+                    client=SimpleNamespace(reconcile=lambda pending: calls.append(now[0]) or result),
+                    timeout_seconds=timeout, poll_seconds=0.01,
+                    _stage=lambda *_: nullcontext())
+                with patch('momentum_hunter.science_custody_readonly.time.monotonic', side_effect=lambda: now[0]):
+                    self.assertIs(ScienceCustodyStorageSet._await(storage, self.pending()), result)
+                self.assertEqual([hint_end], calls)
+
     def test_present_hint_cannot_hide_integrity_failure(self):
         def reject(_pending):
             raise CustodyCommitIntegrityError('Wrong completion identity')
