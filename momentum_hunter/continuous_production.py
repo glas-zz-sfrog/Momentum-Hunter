@@ -1238,7 +1238,8 @@ def run_writer(config_path: Path, stop=None, host=None) -> int:
     complete = False
     try:
         admission = None if policy is None else NativeWriterAdmission(config, policy)
-        profile = open_writer_startup_profile(config, generation=host.generation if host else "")
+        profile = None if policy is None else open_writer_startup_profile(
+            config, generation=host.generation if host else "")
         server = ProductionWriterServer(config, science_custody_policy=policy,
                                         native_writer_admission=admission, custody_trace_hook=trace,
                                         custody_generation=host.generation if host else None,

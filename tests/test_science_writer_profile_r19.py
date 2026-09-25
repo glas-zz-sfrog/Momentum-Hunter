@@ -17,6 +17,26 @@ GENERATION = "12345678-1234-1234-1234-123456789abc"
 
 
 class WriterStartupProfileTests(unittest.TestCase):
+    def test_no_custody_worker_does_not_create_unowned_profile(self):
+        config = {"inputMode": "OFFLINE_QUALIFICATION",
+                  "host": {"instanceId": "qual-015-013b-sc19-test"},
+                  "ipcHost": "127.0.0.1", "ipcPort": 1}
+        server = Mock()
+        server.serve_forever.return_value = True
+        server.science_custody_status = {"state": "DISABLED", "threadAlive": False}
+        with patch.object(production, "_read_config", return_value=config), patch.object(
+                production, "science_custody_policy", return_value=None), patch(
+                "momentum_hunter.science_custody_trace_020u.open_020u_trace", return_value=None), patch(
+                "momentum_hunter.science_writer_profile_r19.open_writer_startup_profile") as factory, patch(
+                "momentum_hunter.windows_writer_profile.NativeWriterAdmission") as admission, patch.object(
+                production, "ProductionWriterServer", return_value=server) as constructor:
+            self.assertEqual(0, production.run_writer(Path("unused-test-config")))
+        factory.assert_not_called()
+        admission.assert_not_called()
+        self.assertIsNone(constructor.call_args.kwargs["qualification_profile"])
+        server.serve_forever.assert_called_once_with("127.0.0.1", 1, None, None)
+        server.close.assert_called_once_with()
+
     def test_only_exact_disposable_offline_namespace_is_profiled(self):
         for mode, instance in (("LIVE", "qual-015-013b-sc19-test"),
                                ("OFFLINE_QUALIFICATION", "production"),
