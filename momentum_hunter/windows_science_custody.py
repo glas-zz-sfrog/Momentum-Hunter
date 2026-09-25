@@ -420,6 +420,10 @@ class _Native:
                   [w.HANDLE, c.c_int, c.c_void_p, w.DWORD, c.POINTER(w.DWORD)], w.BOOL)
         self.bind(self.a, "LookupPrivilegeNameW",
                   [w.LPCWSTR, c.c_void_p, w.LPWSTR, c.POINTER(w.DWORD)], w.BOOL)
+        self.nt = c.WinDLL("ntdll", use_last_error=True)
+        self.bind(self.nt, "NtOpenFile", [c.POINTER(w.HANDLE), w.DWORD,
+                  c.c_void_p, c.c_void_p, w.ULONG, w.ULONG], w.LONG)
+        self.bind(self.nt, "RtlNtStatusToDosError", [w.LONG], w.ULONG)
         self._token_cache = None
         self._security_cache = {}
 
@@ -637,8 +641,57 @@ class _Native:
         finally:
             self.k.LocalFree(sd)
 
+    def _open_transport_read(self, path: Path, parent):
+        w = self.w
+        _require(not parent.closed and _path_key(path.parent) == _path_key(parent.path)
+                 and len(_relative(path.name)) == 1, "Transport read differs from its pinned parent.")
+
+        class NAME(c.Structure):
+            _fields_ = [("length", w.USHORT), ("maximum", w.USHORT), ("buffer", w.LPWSTR)]
+        class ATTRIBUTES(c.Structure):
+            _fields_ = [("length", w.ULONG), ("root", w.HANDLE), ("name", c.POINTER(NAME)),
+                        ("flags", w.ULONG), ("security", c.c_void_p), ("qos", c.c_void_p)]
+        class IO_STATUS(c.Structure):
+            _fields_ = [("status", c.c_void_p), ("information", c.c_size_t)]
+
+        raw_length = len(path.name.encode("utf-16-le"))
+        _require(raw_length <= 65532, "Transport leaf name exceeds native bound.")
+        text = c.create_unicode_buffer(path.name)
+        name = NAME(raw_length, raw_length + 2, c.cast(text, w.LPWSTR))
+        attributes = ATTRIBUTES(c.sizeof(ATTRIBUTES), parent.value, c.pointer(name), 0x40, None, None)
+        value = w.HANDLE()
+        result = IO_STATUS()
+        # Same read/share/no-follow/write-through contract as CreateFileW,
+        # relative to the already-pinned directory. Preserve native failure
+        # identity: CreateFileW conflates DELETE_PENDING with ACCESS_DENIED.
+        status = self.nt.NtOpenFile(c.byref(value), 0x120081, c.byref(attributes),
+                                   c.byref(result), 5, 0x200062) & 0xFFFFFFFF
+        if status:
+            if value.value not in (None, 0, storage._INVALID_HANDLE_VALUE):
+                self.checked(self.k.CloseHandle(value), "Close unsuccessful transport read")
+            if status == 0xC0000056:
+                # No object was acquired. This is transport retirement, never
+                # successful custody admission or permission to ignore denial.
+                error = storage._windows_error("NtOpenFile: transport is delete-pending", 2)
+                error.ntstatus = status
+                raise error
+            error = int(self.nt.RtlNtStatusToDosError(c.c_long(status)))
+            if error in {5, 1307, 1314}:
+                raise ScienceCustodyNativeError(
+                    f"Transport read authority failed (NTSTATUS {status:#010x}, Win32 {error}).")
+            raise storage._windows_error(f"NtOpenFile transport (NTSTATUS {status:#010x})", error)
+        _require(value.value not in (None, 0, storage._INVALID_HANDLE_VALUE),
+                 "Native transport read returned no handle.")
+        return storage._WindowsHandle(int(value.value), path)
+
     def open(self, path: Path, *, directory: bool = False, access: int = READ,
-             share: int = 1, disposition: int = 3, sddl: str | None = None):
+             share: int = 1, disposition: int = 3, sddl: str | None = None,
+             relative_to=None):
+        if relative_to is not None:
+            _require(not directory and access == 0x120081 and share == 5
+                     and disposition == 3 and sddl is None,
+                     "Relative transport open may only acquire the unchanged read contract.")
+            return self._open_transport_read(path, relative_to)
         flags = 0x00200000 | (0x02000000 if directory else 0x08000000)
         if sddl is None:
             value = self.k.CreateFileW(_io_path(path), access, share, None, disposition, flags, None)
@@ -1239,7 +1292,8 @@ class WindowsScienceCustodyBackend:
             # Completion remains the separate durability gate for acceptance.
             narrow = self.policy.version == mutable.VERSION and namespace in TRANSPORT
             handle = self._native.open(path, access=0x120081 if handoff or narrow else READ,
-                                       share=5 if handoff else (7 if namespace in {"claims", "receipts"} else 1))
+                                       share=5 if handoff else (7 if namespace in {"claims", "receipts"} else 1),
+                                       relative_to=parent if handoff else None)
         except OSError as exc:
             if missing and exc.winerror == 2:
                 return None
