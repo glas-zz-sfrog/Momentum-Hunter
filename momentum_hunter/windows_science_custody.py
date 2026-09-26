@@ -1558,7 +1558,7 @@ class WindowsScienceCustodyBackend:
             count = 0
             while pending:
                 directory, current = pending.pop()
-                with os.scandir(directory.path) as entries:
+                with os.scandir(_io_path(directory.path)) as entries:
                     for entry in entries:
                         count += 1
                         _require(count <= self.policy.max_history_entries,

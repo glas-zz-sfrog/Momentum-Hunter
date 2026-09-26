@@ -910,6 +910,8 @@ class NativeBackendFlowTests(unittest.TestCase):
 
     @staticmethod
     def memory_scandir(native, path):
+        if str(path).startswith("\\\\?\\"):
+            path = str(path)[4:]
         values = []
         for obj in tuple(native.objects.values()):
             if mod._path_key(obj.path.parent) == mod._path_key(path):
@@ -921,6 +923,88 @@ class NativeBackendFlowTests(unittest.TestCase):
             def __exit__(self, *args):
                 return False
         return Entries()
+
+    def history_fixture(self, *, long=True, **policy_changes):
+        backend, native = self.make_backend(**policy_changes)
+        suffix = "sessions/2026-08-27/s-" + "a" * 64 + "/sources/export/" + "b" * 64
+        base = backend.namespace_root("custody")
+        if long:
+            padding = 272 - len(str(base / suffix)) - 1
+            self.assertGreater(padding, 0)
+            suffix = "p" * padding + "/" + suffix
+            self.assertEqual(272, len(str(base / suffix)))
+        relative = suffix + "/probe.source.json"
+        backend.create_trusted("custody", relative, b"committed custody bytes")
+        return backend, native, base / relative
+
+    def host_scandir(self, native, path):
+        # Simulate the embedded host's MAX_PATH behavior, not access authority.
+        if len(str(path)) >= 260 and not str(path).startswith("\\\\?\\"):
+            raise winerror(3)
+        return self.memory_scandir(native, path)
+
+    def test_history_scan_long_host_path_keeps_logical_paths_and_identity(self):
+        for long in (False, True):
+            with self.subTest(long=long):
+                backend, native, leaf = self.history_fixture(long=long)
+                before = native.objects[mod._path_key(leaf)].identity
+                with patch.object(mod.os, "scandir", side_effect=lambda path: self.host_scandir(native, path)):
+                    self.assertEqual((leaf,), backend.iter_trusted("custody", suffix=".source.json"))
+                self.assertEqual(before, native.objects[mod._path_key(leaf)].identity)
+                self.assertTrue(all(not str(path).startswith("\\\\?\\") for path, _ in native.opens))
+                self.assertEqual(b"committed custody bytes", backend.read_trusted(
+                    "custody", leaf.relative_to(backend.namespace_root("custody")).as_posix(), maximum=100).raw)
+
+    def test_history_scan_long_path_rejects_leaf_security_reparse_and_hardlink(self):
+        for change in ("security", "reparse", "links"):
+            with self.subTest(change=change):
+                backend, native, leaf = self.history_fixture()
+                obj = native.objects[mod._path_key(leaf)]
+                if change == "security":
+                    obj.security = security(owner=SCIENCE)
+                elif change == "reparse":
+                    obj.attributes |= mod.REPARSE
+                else:
+                    obj.links = 2
+                with patch.object(mod.os, "scandir", side_effect=lambda path: self.host_scandir(native, path)):
+                    with self.assertRaises(mod.ScienceCustodyNativeError):
+                        backend.iter_trusted("custody", suffix=".source.json")
+
+    def test_history_scan_long_path_rejects_pinned_directory_drift(self):
+        for change in ("identity", "security", "reparse"):
+            with self.subTest(change=change):
+                backend, native, leaf = self.history_fixture()
+                obj = native.objects[mod._path_key(leaf.parent)]
+                def drift_after_pin(path):
+                    if str(path).removeprefix("\\\\?\\") == str(leaf.parent):
+                        self.assertIn(mod._path_key(leaf.parent), backend._pins)
+                        if change == "identity":
+                            obj.identity = (9, 9, 9)
+                        elif change == "security":
+                            obj.security = security(directory=True, owner=SCIENCE)
+                        else:
+                            obj.attributes |= mod.REPARSE
+                    return self.host_scandir(native, path)
+                with patch.object(mod.os, "scandir", side_effect=drift_after_pin):
+                    with self.assertRaises(mod.ScienceCustodyNativeError):
+                        backend.iter_trusted("custody", suffix=".source.json")
+
+    def test_history_scan_missing_directory_error_is_not_suppressed(self):
+        backend, native, leaf = self.history_fixture()
+        def missing(path):
+            if str(path).removeprefix("\\\\?\\") == str(leaf.parent):
+                raise winerror(3)
+            return self.memory_scandir(native, path)
+        with patch.object(mod.os, "scandir", side_effect=missing):
+            with self.assertRaises(OSError) as raised:
+                backend.iter_trusted("custody", suffix=".source.json")
+        self.assertEqual(3, raised.exception.winerror)
+
+    def test_history_scan_long_path_retains_entry_bound(self):
+        backend, native, _ = self.history_fixture(max_history_entries=2)
+        with patch.object(mod.os, "scandir", side_effect=lambda path: self.host_scandir(native, path)):
+            with self.assertRaisesRegex(mod.ScienceCustodyNativeError, "configured bound"):
+                backend.iter_trusted("custody", suffix=".source.json")
 
     def test_lower_wire_cap_real_protocol_publish_duplicate_lookup_and_metadata_audit(self):
         backend, native = self.make_backend(max_request_bytes=2048)
