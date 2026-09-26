@@ -1,10 +1,11 @@
 from copy import deepcopy
 from datetime import datetime, timezone, timedelta
+import json
 import os
 from pathlib import Path
 import tempfile
 import unittest
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 import uuid
 
 from momentum_hunter import continuous_host_generation as generation
@@ -19,7 +20,7 @@ class GenerationBoundaryTests(unittest.TestCase):
         self.config = configuration(Path(temporary.name))
         self.generations = {}
         self.exited = set()
-        self.lifetime = patch.object(generation, "process_lifetime", side_effect=lambda pid, birth:
+        self.lifetime = patch.object(generation, "process_lifetime", side_effect=lambda pid, birth, **kwargs:
             "UNKNOWN" if type(pid) is not int or type(birth) is not int else
             "EXITED_PID_RECYCLED" if birth != pid * 100 else "EXITED" if pid in self.exited else "ALIVE")
         self.lifetime.start()
@@ -177,6 +178,96 @@ class GenerationBoundaryTests(unittest.TestCase):
         self.finish("runtime")
         generation.replace_status(generation.generation_path(self.config, "runtime"), self.generations["runtime"])
         self.assertFalse(generation.dependencies_drained(self.config, "science"))
+
+    def test_drain_observation_preserves_each_lifetime_decision_and_read_count(self):
+        self.finish("runtime")
+        self.finish("science")
+        for state in ("ALIVE", "UNKNOWN", "EXITED", "EXITED_PID_RECYCLED"):
+            def lifetime(pid, birth, *, observation=None):
+                if observation is not None:
+                    observation.update(pid=pid, birth=birth, state=state)
+                return state
+            with self.subTest(state=state), patch.object(generation, "process_lifetime", side_effect=lifetime), \
+                 patch.object(generation, "read_record", wraps=generation.read_record) as read:
+                plain = generation.dependencies_drained(self.config, "writer")
+                plain_paths = [call.args[0] for call in read.call_args_list]
+                read.reset_mock()
+                observed = {}
+                self.assertEqual(plain, generation.dependencies_drained(self.config, "writer", observation=observed))
+                self.assertEqual(plain_paths, [call.args[0] for call in read.call_args_list])
+                self.assertEqual(state, observed["science"]["processLifetime"]["state"])
+                self.assertEqual(plain, observed["science"]["accepted"])
+                self.assertTrue(observed["runtime"]["accepted"])
+                self.assertEqual(self.generations["science"]["generation"], observed["science"]["generation"])
+                json_safe = json.loads(json.dumps(observed))
+                self.assertEqual(observed, json_safe)
+
+    def test_drain_observation_preserves_short_circuit_and_rejects_stale_receipt(self):
+        self.finish("runtime", generation=str(uuid.uuid4()))
+        self.finish("science")
+        observed = {}
+        with patch.object(generation, "process_lifetime") as lifetime:
+            self.assertFalse(generation.dependencies_drained(self.config, "writer", observation=observed))
+        lifetime.assert_not_called()
+        self.assertEqual({"runtime"}, set(observed))
+        self.assertFalse(observed["runtime"]["accepted"])
+
+    def test_drain_observation_preserves_receipt_guards(self):
+        self.finish("runtime")
+        for change in ({"exitCode": 2}, {"pendingWork": 1}, {"drainComplete": False},
+                       {"cleanupComplete": False}, {"publicationFailure": "PENDING"},
+                       {"hostFingerprint": "wrong"}, {"dependencies": {}}, {"serviceBirth": 1}):
+            self.finish("science", **change)
+            observed = {}
+            with self.subTest(change=change):
+                self.assertFalse(generation.dependencies_drained(self.config, "writer", observation=observed))
+                self.assertFalse(observed["science"]["accepted"])
+
+    def test_record_observation_distinguishes_native_read_failure_and_invalid_json(self):
+        path = Path(self.config["hostStateRoot"]) / "science" / "completion.json"
+        denied = PermissionError(13, "test denial")
+        denied.winerror = 5
+        for raw, error, state in ((None, denied, "READ_FAILED"), ("{", None, "READ_FAILED"),
+                                  ("[]", None, "NOT_OBJECT"), ("{}", None, "READ_OBJECT")):
+            observed = {}
+            with patch.object(Path, "read_text", return_value=raw, side_effect=error) as read:
+                self.assertEqual({}, generation.read_record(path, observation=observed))
+            read.assert_called_once_with(encoding="utf-8")
+            self.assertEqual(str(path), observed["path"])
+            self.assertEqual(state, observed["state"])
+            if error is not None:
+                self.assertEqual(5, observed["winerror"])
+                self.assertEqual("PermissionError", observed["exception"])
+
+    @unittest.skipUnless(os.name == "nt", "Windows native API contract")
+    def test_native_lifetime_observation_never_treats_access_denial_as_exit(self):
+        self.lifetime.stop()
+        self.addCleanup(self.lifetime.start)
+        kernel = Mock()
+        kernel.OpenProcess.return_value = 0
+        for error, expected in ((5, "UNKNOWN"), (87, "EXITED")):
+            with self.subTest(error=error), patch.object(generation.ctypes, "WinDLL", return_value=kernel), \
+                 patch.object(generation.ctypes, "get_last_error", return_value=error):
+                observed = {}
+                self.assertEqual(expected, generation.process_lifetime(123, 456, observation=observed))
+            self.assertEqual({"pid": 123, "birth": 456, "requestedAccess": 0x1000,
+                              "state": expected, "operation": "OpenProcess", "winerror": error}, observed)
+        kernel.CloseHandle.assert_not_called()
+
+    @unittest.skipUnless(os.name == "nt", "Windows native API contract")
+    def test_native_lifetime_observation_closes_acquired_handle_on_query_failure(self):
+        self.lifetime.stop()
+        self.addCleanup(self.lifetime.start)
+        kernel = Mock()
+        kernel.OpenProcess.return_value = 99
+        kernel.GetProcessTimes.return_value = 0
+        with patch.object(generation.ctypes, "WinDLL", return_value=kernel), \
+             patch.object(generation.ctypes, "get_last_error", return_value=5):
+            observed = {}
+            self.assertEqual("UNKNOWN", generation.process_lifetime(123, 456, observation=observed))
+        self.assertEqual("GetProcessTimes", observed["operation"])
+        self.assertEqual(5, observed["winerror"])
+        kernel.CloseHandle.assert_called_once_with(99)
 
     @unittest.skipUnless(os.name == "nt", "Windows process lifetime metadata")
     def test_native_current_process_birth_and_invalid_pid(self):

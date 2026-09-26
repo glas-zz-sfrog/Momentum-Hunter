@@ -496,6 +496,7 @@ class ProductionWriterServer:
     ) -> None:
         self.config = config
         self._native_writer_admission = native_writer_admission
+        self.dependency_drain_observation = None
         if science_custody_policy is not None and science_custody_policy.actor_profile is not None:
             if native_writer_admission is None:
                 raise ProductionDeploymentError("Bounded Writer admission required before initialization.")
@@ -833,7 +834,14 @@ class ProductionWriterServer:
                             if deadline is None:
                                 bound = self.config["host"]["shutdownSeconds"] if generation and generation.enabled else 30
                                 deadline = time.monotonic() + bound
-                            if not generation or not generation.enabled or dependencies_drained(self.config, "writer"):
+                            if not generation or not generation.enabled:
+                                return True
+                            self.dependency_drain_observation = {
+                                "observedAt": datetime.now(timezone.utc).isoformat(), "dependencies": {}}
+                            drained = dependencies_drained(self.config, "writer", observation=
+                                                          self.dependency_drain_observation["dependencies"])
+                            self.dependency_drain_observation["accepted"] = drained
+                            if drained:
                                 return True
                             if time.monotonic() >= deadline:
                                 return False
@@ -1264,7 +1272,8 @@ def run_writer(config_path: Path, stop=None, host=None) -> int:
     if host:
         host.status("STOPPED" if complete else "INCOMPLETE", drainComplete=complete,
                     cleanupComplete=custody_closed, pendingWork=0 if complete else "UNKNOWN",
-                    dependencies={}, scienceCustody=custody)
+                    dependencies={}, scienceCustody=custody,
+                    dependencyDrain=server.dependency_drain_observation)
     return 0 if complete else 2
 
 

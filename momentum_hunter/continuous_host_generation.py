@@ -14,10 +14,16 @@ import uuid
 from momentum_hunter.continuous_host_contract import canonical_bytes, SCM_DIRECT, science_custody_policy
 
 
-def process_lifetime(pid: int, birth: int) -> str:
+def process_lifetime(pid: int, birth: int, *, observation: dict | None = None) -> str:
     """Missing query permission is UNKNOWN, never evidence that a process exited."""
+    def result(state, operation, error=None):
+        if observation is not None:
+            observation.update(pid=pid, birth=birth, requestedAccess=0x1000,
+                               state=state, operation=operation, winerror=error)
+        return state
+
     if os.name != "nt" or type(pid) is not int or pid <= 0 or type(birth) is not int or birth <= 0:
-        return "UNKNOWN"
+        return result("UNKNOWN", "INPUT_VALIDATION")
     kernel = ctypes.WinDLL("kernel32", use_last_error=True)
     kernel.OpenProcess.argtypes = [wintypes.DWORD, wintypes.BOOL, wintypes.DWORD]
     kernel.OpenProcess.restype = wintypes.HANDLE
@@ -26,20 +32,25 @@ def process_lifetime(pid: int, birth: int) -> str:
     kernel.CloseHandle.argtypes = [wintypes.HANDLE]
     handle = kernel.OpenProcess(0x1000, False, pid)
     if not handle:
-        return "EXITED" if ctypes.get_last_error() == 87 else "UNKNOWN"
+        error = ctypes.get_last_error()
+        return result("EXITED" if error == 87 else "UNKNOWN", "OpenProcess", error)
     try:
         times = [wintypes.FILETIME() for _ in range(4)]
         code = wintypes.DWORD()
         if not kernel.GetProcessTimes(handle, *(ctypes.byref(value) for value in times)):
-            return "UNKNOWN"
+            return result("UNKNOWN", "GetProcessTimes", ctypes.get_last_error())
         actual = times[0].dwLowDateTime | (times[0].dwHighDateTime << 32)
+        if observation is not None:
+            observation["actualBirth"] = actual
         if actual != birth:
-            return "EXITED_PID_RECYCLED"
+            return result("EXITED_PID_RECYCLED", "GetProcessTimes")
         if times[1].dwLowDateTime or times[1].dwHighDateTime:
-            return "EXITED"
+            return result("EXITED", "GetProcessTimes")
         if not kernel.GetExitCodeProcess(handle, ctypes.byref(code)):
-            return "UNKNOWN"
-        return "ALIVE" if code.value == 259 else "EXITED"
+            return result("UNKNOWN", "GetExitCodeProcess", ctypes.get_last_error())
+        if observation is not None:
+            observation["exitCode"] = code.value
+        return result("ALIVE" if code.value == 259 else "EXITED", "GetExitCodeProcess")
     finally:
         kernel.CloseHandle(handle)
 
@@ -87,11 +98,18 @@ def replace_status(path: Path, payload: dict):
             time.sleep(0.01)
 
 
-def read_record(path: Path) -> dict:
+def read_record(path: Path, *, observation: dict | None = None) -> dict:
+    if observation is not None:
+        observation["path"] = str(path)
     try:
         result = json.loads(path.read_text(encoding="utf-8"))
+        if observation is not None:
+            observation["state"] = "READ_OBJECT" if isinstance(result, dict) else "NOT_OBJECT"
         return result if isinstance(result, dict) else {}
-    except (OSError, ValueError):
+    except (OSError, ValueError) as exc:
+        if observation is not None:
+            observation.update(state="READ_FAILED", exception=type(exc).__name__,
+                               winerror=getattr(exc, "winerror", None), errno=getattr(exc, "errno", None))
         return {}
 
 
@@ -173,17 +191,33 @@ def aggregate_health(config):
     return {"ready": all(row["ready"] for row in results.values()), "generations": vector, "components": results}
 
 
-def completion(config, role):
+def completion(config, role, *, observation: dict | None = None):
     """Accept a bound drain receipt only after the matching process has exited."""
-    generation = read_record(generation_path(config, role))
-    value = read_record(Path(config["hostStateRoot"]) / role / "completion.json")
+    def read(path):
+        if observation is None:
+            return read_record(path)
+        detail = {}
+        observation.setdefault("reads", []).append(detail)
+        return read_record(path, observation=detail)
+
+    generation = read(generation_path(config, role))
+    value = read(Path(config["hostStateRoot"]) / role / "completion.json")
+    if observation is not None:
+        observation.update(role=role, generation=generation.get("generation"),
+                           completionGeneration=value.get("generation"), phase=generation.get("phase"))
     try:
         if str(uuid.UUID(generation["generation"])) != generation["generation"]:
             return False
     except (KeyError, TypeError, ValueError):
         return False
-    upstream = {key: read_record(generation_path(config, key)).get("generation")
+    upstream = {key: read(generation_path(config, key)).get("generation")
                 for key in {"runtime": ("writer",), "science": ("writer", "runtime"), "writer": ()}[role]}
+    def lifetime():
+        if observation is None:
+            return process_lifetime(generation.get("servicePid"), generation.get("serviceBirth"))
+        detail = observation["processLifetime"] = {}
+        return process_lifetime(generation.get("servicePid"), generation.get("serviceBirth"), observation=detail)
+
     exited = generation.get("phase") == "EXITED"
     if role == "science" and config["host"]["science"].get("hostingModel") == SCM_DIRECT:
         exited = bool(generation.get("executionModel") == SCM_DIRECT and
@@ -194,7 +228,7 @@ def completion(config, role):
             value.get("executionModel") == SCM_DIRECT and
             value.get("servicePid") == generation.get("servicePid") and
             value.get("serviceBirth") == generation.get("serviceBirth") and
-            process_lifetime(generation.get("servicePid"), generation.get("serviceBirth")) in ("EXITED", "EXITED_PID_RECYCLED"))
+            lifetime() in ("EXITED", "EXITED_PID_RECYCLED"))
     return bool(all(upstream.values()) and value.get("dependencies") == upstream and
                 generation.get("hostFingerprint") == config["hostFingerprint"] and
                 exited and value.get("generation") == generation.get("generation") and
@@ -204,8 +238,16 @@ def completion(config, role):
                 not value.get("publicationFailure"))
 
 
-def dependencies_drained(config, role):
-    return all(completion(config, dependency) for dependency in
+def dependencies_drained(config, role, *, observation: dict | None = None):
+    def check(dependency):
+        if observation is None:
+            return completion(config, dependency)
+        detail = observation[dependency] = {}
+        accepted = completion(config, dependency, observation=detail)
+        detail["accepted"] = accepted
+        return accepted
+
+    return all(check(dependency) for dependency in
                {"runtime": (), "science": ("runtime",), "writer": ("runtime", "science")}[role])
 
 
