@@ -239,6 +239,43 @@ class GenerationBoundaryTests(unittest.TestCase):
                 self.assertEqual(5, observed["winerror"])
                 self.assertEqual("PermissionError", observed["exception"])
 
+    def test_drain_observation_bounds_invalid_metadata_without_changing_predicates(self):
+        self.finish("runtime")
+        self.finish("science")
+        for field, value in (("generation", "X" * 1048576), ("generation", ["X" * 1048576]),
+                             ("phase", {"nested": ["X" * 1048576]})):
+            path = (Path(self.config["hostStateRoot"]) / "science" /
+                    ("completion.json" if field == "generation" else "generation.json"))
+            original = generation.read_record(path)
+            generation.replace_status(path, {**original, field: value})
+            try:
+                with self.subTest(field=field, type=type(value).__name__), \
+                     patch.object(generation, "read_record", wraps=generation.read_record) as read:
+                    plain = generation.dependencies_drained(self.config, "writer")
+                    count = read.call_count
+                    read.reset_mock()
+                    observed = {}
+                    self.assertFalse(plain)
+                    self.assertEqual(plain, generation.dependencies_drained(self.config, "writer", observation=observed))
+                    self.assertEqual(count, read.call_count)
+                    key = "completionGeneration" if field == "generation" else "phase"
+                    self.assertTrue(observed["science"][key]["omitted"])
+                    self.assertLess(len(json.dumps(observed)), 4096)
+            finally:
+                generation.replace_status(path, original)
+
+    def test_drain_observation_omits_oversized_identity_and_path_without_reinterpreting_it(self):
+        for value in (1 << 256, -(1 << 256), {"pid": "X" * 1048576}, ["X" * 1048576]):
+            observed = generation._drain_observation_value(value)
+            self.assertTrue(observed["omitted"])
+            self.assertLess(len(json.dumps(observed)), 100)
+        path = Path("X" * 10000)
+        observed = {}
+        with patch.object(Path, "read_text", side_effect=FileNotFoundError(2, "fixture")):
+            self.assertEqual({}, generation.read_record(path, observation=observed))
+        self.assertEqual({"type": "str", "characters": 10000, "omitted": True}, observed["path"])
+        self.assertEqual("READ_FAILED", observed["state"])
+
     @unittest.skipUnless(os.name == "nt", "Windows native API contract")
     def test_native_lifetime_observation_never_treats_access_denial_as_exit(self):
         self.lifetime.stop()

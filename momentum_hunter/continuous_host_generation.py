@@ -14,11 +14,22 @@ import uuid
 from momentum_hunter.continuous_host_contract import canonical_bytes, SCM_DIRECT, science_custody_policy
 
 
+def _drain_observation_value(value, *, text_limit=64):
+    """Bound diagnostic retention only; predicates still receive the original value."""
+    if value is None or type(value) is bool:
+        return value
+    if type(value) is str:
+        return value if len(value) <= text_limit else {"type": "str", "characters": len(value), "omitted": True}
+    if type(value) is int and -(1 << 63) <= value < (1 << 64):
+        return value
+    return {"type": type(value).__name__[:64], "omitted": True}
+
+
 def process_lifetime(pid: int, birth: int, *, observation: dict | None = None) -> str:
     """Missing query permission is UNKNOWN, never evidence that a process exited."""
     def result(state, operation, error=None):
         if observation is not None:
-            observation.update(pid=pid, birth=birth, requestedAccess=0x1000,
+            observation.update(pid=_drain_observation_value(pid), birth=_drain_observation_value(birth), requestedAccess=0x1000,
                                state=state, operation=operation, winerror=error)
         return state
 
@@ -100,7 +111,7 @@ def replace_status(path: Path, payload: dict):
 
 def read_record(path: Path, *, observation: dict | None = None) -> dict:
     if observation is not None:
-        observation["path"] = str(path)
+        observation["path"] = _drain_observation_value(str(path), text_limit=4096)
     try:
         result = json.loads(path.read_text(encoding="utf-8"))
         if observation is not None:
@@ -203,8 +214,9 @@ def completion(config, role, *, observation: dict | None = None):
     generation = read(generation_path(config, role))
     value = read(Path(config["hostStateRoot"]) / role / "completion.json")
     if observation is not None:
-        observation.update(role=role, generation=generation.get("generation"),
-                           completionGeneration=value.get("generation"), phase=generation.get("phase"))
+        observation.update(role=role, generation=_drain_observation_value(generation.get("generation")),
+                           completionGeneration=_drain_observation_value(value.get("generation")),
+                           phase=_drain_observation_value(generation.get("phase")))
     try:
         if str(uuid.UUID(generation["generation"])) != generation["generation"]:
             return False
