@@ -1671,7 +1671,9 @@ class ContinuousOpportunityRuntime:
             )
             for item in payload.get("symbol_failures", [])
         )
-        for item in attempt_events:
+        # Checkpointed failures retain their result identity; the attempt ledger
+        # identifies the input work. Replay only events beyond the proven anchor.
+        for item in attempt_events[anchored_attempt_count:]:
             if item.event_type != ATTEMPT_FAILED:
                 continue
             runtime._symbol_failures[item.symbol] = SymbolFailure(

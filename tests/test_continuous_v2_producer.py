@@ -369,6 +369,100 @@ class ContinuousV2ProducerTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "runtime identity"):
             self.runtime(self.producer)
 
+    def failed_readiness_runtime(self):
+        from tests.test_continuous_runtime import SyntheticMarketData
+        self.now = at(11, 21)
+        runtime, kwargs = self.runtime(self.producer)
+        market = SyntheticMarketData()
+        market.fail_symbols.add("AAA")
+        runtime.market_data_source = market
+        kwargs["market_data_source"] = market
+        runtime.start(self.now)
+        return runtime, kwargs
+
+    def restore_research_runtime(self, runtime, kwargs):
+        from momentum_hunter.continuous_runtime import ContinuousOpportunityRuntime
+        runtime.lease_registry.release(runtime.lease)
+        self.producer.close()
+        self.now += timedelta(seconds=31)
+        self.producer = self.opened()
+        kwargs["research_producer"] = self.producer
+        kwargs["runtime_instance_id"] += "-restart"
+        return ContinuousOpportunityRuntime.restore(now=self.now, **kwargs)
+
+    def test_checkpointed_failure_replay_preserves_bytes_and_accepts_new_work(self):
+        from momentum_hunter.continuous_runtime import CANONICAL_BAR_COMPLETED, RuntimeTriggerEvent
+        runtime, kwargs = self.failed_readiness_runtime()
+        runtime.tick(self.now, work_budget=512)
+        prior_failure = runtime.symbol_failures[0]
+        terminal = next(e for e in runtime.attempt_history if e.event_id == prior_failure.attempt_event_id)
+        self.assertNotEqual(prior_failure.source_fingerprint, terminal.source_fingerprint)
+        self.assertIsNone(runtime.research_publication_failure)
+        runtime.shutdown(self.now)
+        before = [p.raw_bytes for p in self.producer.exporter.published()]
+        restored = self.restore_research_runtime(runtime, kwargs)
+        try:
+            self.assertIsNone(restored.research_publication_failure)
+            self.assertEqual(prior_failure, restored.symbol_failures[0])
+            self.assertEqual(before, [p.raw_bytes for p in self.producer.exporter.published()])
+            restored.submit_event(RuntimeTriggerEvent(event_id="new-generation-bar", trigger=CANONICAL_BAR_COMPLETED,
+                occurred_at=self.now.isoformat(), symbol="AAA", source_fingerprint="b" * 64,
+                provider_timestamp=self.now.isoformat()), self.now)
+            restored.tick(self.now, work_budget=512)
+            self.assertIsNone(restored.research_publication_failure)
+            after = [p.raw_bytes for p in self.producer.exporter.published()]
+            self.assertEqual(before, after[:len(before)])
+            self.assertGreater(len(after), len(before))
+        finally:
+            restored.shutdown(self.now)
+
+    def test_checkpointed_failure_before_publication_replays_original_result(self):
+        runtime, kwargs = self.failed_readiness_runtime()
+        with patch.object(runtime, "_publish_research_failure", side_effect=KeyboardInterrupt):
+            with self.assertRaises(KeyboardInterrupt):
+                runtime.tick(self.now, work_budget=512)
+        prior_failure = runtime.symbol_failures[0]
+        before = [p.raw_bytes for p in self.producer.exporter.published()]
+        restored = self.restore_research_runtime(runtime, kwargs)
+        try:
+            self.assertIsNone(restored.research_publication_failure)
+            self.assertEqual(prior_failure, restored.symbol_failures[0])
+            after = [p.raw_bytes for p in self.producer.exporter.published()]
+            self.assertEqual(before, after[:len(before)])
+            self.assertEqual(len(before) + 1, len(after))
+        finally:
+            restored.shutdown(self.now)
+
+    def test_failure_ahead_of_checkpoint_is_recovered_from_attempt_ledger(self):
+        runtime, kwargs = self.failed_readiness_runtime()
+        with patch.object(runtime, "_record_symbol_failure", side_effect=KeyboardInterrupt):
+            with self.assertRaises(KeyboardInterrupt):
+                runtime.tick(self.now, work_budget=512)
+        self.assertFalse(runtime.symbol_failures)
+        terminal = runtime.attempt_history[-1]
+        self.assertEqual("ATTEMPT_FAILED", terminal.event_type)
+        checkpoint = runtime.checkpoint_store.load(runtime.config.runtime_identity)
+        self.assertLess(checkpoint["attempt_ledger_count"], len(runtime.attempt_history))
+        restored = self.restore_research_runtime(runtime, kwargs)
+        try:
+            self.assertIsNone(restored.research_publication_failure)
+            failure = restored.symbol_failures[0]
+            self.assertEqual(terminal.event_id, failure.attempt_event_id)
+            self.assertEqual(terminal.source_fingerprint, failure.source_fingerprint)
+        finally:
+            restored.shutdown(self.now)
+        # Shutdown drains the interrupted work as a new attempt; its failure is
+        # now checkpointed too, and must remain byte-stable on the next restart.
+        failure = restored.symbol_failures[0]
+        before = [p.raw_bytes for p in self.producer.exporter.published()]
+        again = self.restore_research_runtime(restored, kwargs)
+        try:
+            self.assertIsNone(again.research_publication_failure)
+            self.assertEqual(failure, again.symbol_failures[0])
+            self.assertEqual(before, [p.raw_bytes for p in self.producer.exporter.published()])
+        finally:
+            again.shutdown(self.now)
+
     def test_serialization_and_storage_failures_are_terminally_honest(self):
         with self.assertRaises(ValueError):
             self.producer.capture(stage="HEALTH", source_id="nan", source={"value": float("nan")},
