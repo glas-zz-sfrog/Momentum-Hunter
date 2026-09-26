@@ -235,6 +235,12 @@ def retained_inputs(config, checkpoint=None):
         for key in ("last_tick_at", "last_heartbeat_at", "last_discovery_completed_at"):
             if checkpoint.get(key):
                 replay.clock.advance_to(checkpoint[key])
+        if "writer_liveness" in checkpoint:
+            from momentum_hunter.writer_liveness import WriterLiveness
+            monitor = WriterLiveness.restore(checkpoint["writer_liveness"])
+            if monitor.last_observation is not None:
+                # Durable work can complete after the replay tick that started it.
+                replay.clock.advance_to(datetime.fromtimestamp(monitor.last_observation, timezone.utc))
         seen_root = Path(config["runtimeStateRoot"]) / "session" / "source-evidence" / "finviz"
         replay.discovery_provider.index = max((i + 1 for i, snapshot in enumerate(replay.discovery_provider.snapshots)
             if (seen_root / (snapshot.snapshot_id + ".json")).exists()), default=0)
