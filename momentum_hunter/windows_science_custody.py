@@ -1271,23 +1271,23 @@ class WindowsScienceCustodyBackend:
         From here onward only this handle supplies identity and bytes, including
         after a peer renames the file or replaces its former directory entry.
         """
-        def identity(*, acquired: bool):
+        def identity():
             info = self._native.information(handle)
             _require(not info.dwFileAttributes & (REPARSE | DIRECTORY),
                      "Handoff must be an ordinary non-reparse file.")
-            # The acquired handle can outlive Science's exact-object transport
-            # retirement. Zero links after the read is not an alias; two are.
-            allowed_links = (1,) if acquired else (0, 1)
-            _require(info.nNumberOfLinks in allowed_links,
+            # Acquisition is the successful relative open, not this later query.
+            # Science can retire that object before either metadata observation.
+            # Zero links is retirement, not an alias; two links still fail closed.
+            _require(info.nNumberOfLinks in (0, 1),
                      f"Handoff hard-link alias rejected (links={info.nNumberOfLinks}).")
             value = self._native.identity(handle)
             _require(value[0] == volume, "Handoff volume differs from its pinned namespace.")
             return value
 
-        before = identity(acquired=True)
+        before = identity()
         security = self._native.security(handle)
         raw = self._native.read(handle, maximum)
-        _require(identity(acquired=False) == before, "Acquired handoff object identity changed.")
+        _require(identity() == before, "Acquired handoff object identity changed.")
         return CustodyObjectEvidence(raw, before, security.owner, security.digest)
 
     def _read(self, namespace: str, relative: str, maximum: int, *, missing: bool):

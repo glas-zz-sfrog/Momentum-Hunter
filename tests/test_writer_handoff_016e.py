@@ -236,6 +236,40 @@ class HandoffAcquisitionTests(unittest.TestCase):
                                                 'hard-link alias rejected'):
                         self.read(b, path)
 
+    def test_retirement_before_first_handle_query_preserves_acquired_bytes(self):
+        for namespace, name in (('staging', 'a' * 32 + '.stage'), ('requests', 'request.json')):
+            with self.subTest(namespace=namespace):
+                b, n, _, _ = self.setup_input()
+                path = Path(b.policy.root(namespace).path) / name
+                obj = n.add(path, kind='transport', raw=b'acquired bytes')
+                opening = n.open
+                def open_then_retire(*args, **kwargs):
+                    handle = opening(*args, **kwargs)
+                    n.objects.pop(custody._path_key(path))
+                    obj.links = 0
+                    n.add(path, kind='transport', raw=b'replacement bytes')
+                    return handle
+                n.open = open_then_retire
+                value = b._read(namespace, name, 100, missing=False)
+                self.assertEqual(b'acquired bytes', value.raw)
+                self.assertEqual(obj.identity, value.file_identity)
+                self.assertEqual(1, len(n.opens))
+                self.assertEqual(0x120081, n.opens[0][1]['access'])
+                self.assertEqual(5, n.opens[0][1]['share'])
+                self.assertTrue(all(h.closed for h in n.handles.values()))
+
+    def test_alias_added_before_first_handle_query_still_fails(self):
+        b, n, path, obj = self.setup_input()
+        opening = n.open
+        def open_then_link(*args, **kwargs):
+            handle = opening(*args, **kwargs)
+            obj.links = 2
+            return handle
+        n.open = open_then_link
+        with self.assertRaisesRegex(custody.ScienceCustodyNativeError, 'hard-link alias rejected'):
+            self.read(b, path)
+        self.assertTrue(all(h.closed for h in n.handles.values()))
+
     def test_minimum_read_handle_no_mutation_and_no_write_sharing(self):
         b, n, path, obj = self.setup_input()
         self.read(b, path)
@@ -330,4 +364,10 @@ class HandoffAcquisitionTests(unittest.TestCase):
                 finally: retiring.close()
                 self.assertEqual(0, native.information(reader).nNumberOfLinks)
                 self.assertEqual(b'original', native.read(reader, 100))
+                backend = custody.WindowsScienceCustodyBackend.__new__(custody.WindowsScienceCustodyBackend)
+                backend._native = native
+                identity = native.identity(reader)
+                evidence = backend._handoff_snapshot(reader, identity[0], 100)
+                self.assertEqual(identity, evidence.file_identity)
+                self.assertEqual(b'original', evidence.raw)
             finally: reader.close()
