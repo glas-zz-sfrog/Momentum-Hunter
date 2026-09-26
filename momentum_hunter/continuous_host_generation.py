@@ -25,8 +25,61 @@ def _drain_observation_value(value, *, text_limit=64):
     return {"type": type(value).__name__[:64], "omitted": True}
 
 
+class _ProcessEntry32(ctypes.Structure):
+    _fields_ = [("dwSize", wintypes.DWORD), ("cntUsage", wintypes.DWORD),
+                ("th32ProcessID", wintypes.DWORD), ("th32DefaultHeapID", ctypes.c_size_t),
+                ("th32ModuleID", wintypes.DWORD), ("cntThreads", wintypes.DWORD),
+                ("th32ParentProcessID", wintypes.DWORD), ("pcPriClassBase", wintypes.LONG),
+                ("dwFlags", wintypes.DWORD), ("szExeFile", wintypes.WCHAR * 260)]
+
+
+def _process_absent_from_snapshot(kernel, pid, *, observation=None):
+    """Prove absence from one complete native snapshot, never from a query denial."""
+    kernel.CreateToolhelp32Snapshot.argtypes = [wintypes.DWORD, wintypes.DWORD]
+    kernel.CreateToolhelp32Snapshot.restype = wintypes.HANDLE
+    kernel.Process32FirstW.argtypes = [wintypes.HANDLE, ctypes.POINTER(_ProcessEntry32)]
+    kernel.Process32FirstW.restype = wintypes.BOOL
+    kernel.Process32NextW.argtypes = [wintypes.HANDLE, ctypes.POINTER(_ProcessEntry32)]
+    kernel.Process32NextW.restype = wintypes.BOOL
+    kernel.CloseHandle.restype = wintypes.BOOL
+    detail = {"complete": False, "count": 0, "targetPresent": False, "selfPresent": False}
+    handle = kernel.CreateToolhelp32Snapshot(0x2, 0)
+    if not handle or handle == ctypes.c_void_p(-1).value:
+        detail.update(operation="CreateToolhelp32Snapshot", winerror=ctypes.get_last_error())
+        if observation is not None:
+            observation.update(detail)
+        return False
+    seen = set()
+    try:
+        entry = _ProcessEntry32()
+        entry.dwSize = ctypes.sizeof(entry)
+        if not kernel.Process32FirstW(handle, ctypes.byref(entry)):
+            detail.update(operation="Process32FirstW", winerror=ctypes.get_last_error())
+        else:
+            while True:
+                if entry.dwSize != ctypes.sizeof(entry) or entry.th32ProcessID in seen:
+                    detail.update(operation="SNAPSHOT_ENTRY_INVALID", winerror=None)
+                    break
+                seen.add(entry.th32ProcessID)
+                if len(seen) >= 65536:
+                    detail.update(operation="SNAPSHOT_BOUND", winerror=None)
+                    break
+                ctypes.set_last_error(0)
+                if not kernel.Process32NextW(handle, ctypes.byref(entry)):
+                    error = ctypes.get_last_error()
+                    detail.update(operation="Process32NextW", winerror=error, complete=error == 18)
+                    break
+    finally:
+        closed = bool(kernel.CloseHandle(handle))
+        detail.update(count=len(seen), targetPresent=pid in seen, selfPresent=os.getpid() in seen,
+                      handleClosed=closed)
+        if observation is not None:
+            observation.update(detail)
+    return bool(detail["complete"] and detail["selfPresent"] and not detail["targetPresent"] and closed)
+
+
 def process_lifetime(pid: int, birth: int, *, observation: dict | None = None) -> str:
-    """Missing query permission is UNKNOWN, never evidence that a process exited."""
+    """Query denial alone is UNKNOWN; a complete native snapshot can prove exit."""
     def result(state, operation, error=None):
         if observation is not None:
             observation.update(pid=_drain_observation_value(pid), birth=_drain_observation_value(birth), requestedAccess=0x1000,
@@ -44,6 +97,13 @@ def process_lifetime(pid: int, birth: int, *, observation: dict | None = None) -
     handle = kernel.OpenProcess(0x1000, False, pid)
     if not handle:
         error = ctypes.get_last_error()
+        if error == 5:
+            detail = {} if observation is not None else None
+            absent = _process_absent_from_snapshot(kernel, pid, observation=detail)
+            if observation is not None:
+                observation["exitSnapshot"] = detail
+            if absent:
+                return result("EXITED", "COMPLETE_PROCESS_SNAPSHOT_ABSENCE", error)
         return result("EXITED" if error == 87 else "UNKNOWN", "OpenProcess", error)
     try:
         times = [wintypes.FILETIME() for _ in range(4)]

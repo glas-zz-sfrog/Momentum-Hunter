@@ -1,4 +1,5 @@
 from copy import deepcopy
+import ctypes
 from datetime import datetime, timezone, timedelta
 import json
 import os
@@ -282,11 +283,14 @@ class GenerationBoundaryTests(unittest.TestCase):
         self.addCleanup(self.lifetime.start)
         kernel = Mock()
         kernel.OpenProcess.return_value = 0
+        kernel.CreateToolhelp32Snapshot.return_value = ctypes.c_void_p(-1).value
         for error, expected in ((5, "UNKNOWN"), (87, "EXITED")):
             with self.subTest(error=error), patch.object(generation.ctypes, "WinDLL", return_value=kernel), \
                  patch.object(generation.ctypes, "get_last_error", return_value=error):
                 observed = {}
                 self.assertEqual(expected, generation.process_lifetime(123, 456, observation=observed))
+            if error == 5:
+                self.assertFalse(observed.pop("exitSnapshot")["complete"])
             self.assertEqual({"pid": 123, "birth": 456, "requestedAccess": 0x1000,
                               "state": expected, "operation": "OpenProcess", "winerror": error}, observed)
         kernel.CloseHandle.assert_not_called()
