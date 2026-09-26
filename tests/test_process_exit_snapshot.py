@@ -142,6 +142,16 @@ class ProcessExitSnapshotTests(unittest.TestCase):
             for name in ("OpenProcess", "CreateToolhelp32Snapshot", "CloseHandle"):
                 self.assertEqual(getattr(plain, name).call_args_list, getattr(observed, name).call_args_list)
 
+    def test_non_native_identity_width_never_reaches_a_native_call(self):
+        cases = [(pid, 456) for pid in (0, -1, True, "123", (1 << 32) + 123, 1 << 64)]
+        cases += [(123, birth) for birth in (0, -1, True, "456", 1 << 64, 1 << 256)]
+        for pid, birth in cases:
+            with self.subTest(pid=pid, birth=birth), patch.object(generation.ctypes, "WinDLL") as dll:
+                detail = {}
+                self.assertEqual("UNKNOWN", generation.process_lifetime(pid, birth, observation=detail))
+                self.assertEqual("INPUT_VALIDATION", detail["operation"])
+                dll.assert_not_called()
+
     def test_native_denied_live_process_stays_unknown_but_retained_exited_object_is_proven(self):
         child = r'''
 import ctypes, json, os, sys
@@ -174,6 +184,11 @@ if sys.stdin.readline()!="EXIT\n": sys.exit(9)
             self.assertEqual("UNKNOWN", generation.process_lifetime(process.pid, birth, observation=alive))
             self.assertEqual(5, alive["winerror"])
             self.assertTrue(alive["exitSnapshot"]["targetPresent"])
+            for pid_alias, invalid_birth in ((process.pid + (1 << 32), birth),
+                                             (process.pid, birth + (1 << 64))):
+                invalid = {}
+                self.assertEqual("UNKNOWN", generation.process_lifetime(pid_alias, invalid_birth, observation=invalid))
+                self.assertEqual("INPUT_VALIDATION", invalid["operation"])
             process.stdin.write("EXIT\n")
             process.stdin.flush()
             self.assertEqual(0, process.wait(timeout=10))

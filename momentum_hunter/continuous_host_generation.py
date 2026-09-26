@@ -86,7 +86,8 @@ def process_lifetime(pid: int, birth: int, *, observation: dict | None = None) -
                                state=state, operation=operation, winerror=error)
         return state
 
-    if os.name != "nt" or type(pid) is not int or pid <= 0 or type(birth) is not int or birth <= 0:
+    if (os.name != "nt" or type(pid) is not int or not 0 < pid <= 0xFFFFFFFF
+            or type(birth) is not int or not 0 < birth <= 0xFFFFFFFFFFFFFFFF):
         return result("UNKNOWN", "INPUT_VALIDATION")
     kernel = ctypes.WinDLL("kernel32", use_last_error=True)
     kernel.OpenProcess.argtypes = [wintypes.DWORD, wintypes.BOOL, wintypes.DWORD]
